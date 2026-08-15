@@ -15,8 +15,10 @@ jobs:
       matrix:
         include:
           - name: zer0-stream
-            file: zer0_stream/Dockerfile
+            context: zer0_stream
+            file: Dockerfile
           - name: zer0-stream-media
+            context: .
             file: media_worker/Dockerfile
 
     steps:
@@ -45,7 +47,7 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
