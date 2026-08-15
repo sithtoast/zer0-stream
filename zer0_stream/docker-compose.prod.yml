@@ -7,6 +7,9 @@ services:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required}
       PHX_HOST: ${PHX_HOST:?PHX_HOST is required}
       PORT: ${PORT:-4000}
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+      DB_STARTUP_RETRIES: ${DB_STARTUP_RETRIES:-30}
+      DB_STARTUP_DELAY: ${DB_STARTUP_DELAY:-2}
 
   media_worker:
     build:
