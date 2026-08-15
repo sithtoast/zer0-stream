@@ -1,7 +1,6 @@
 services:
   app:
     image: sithtoast/zer0-stream:latest
-    build: null
     environment:
       MIX_ENV: prod
       PHX_SERVER: "true"
@@ -15,7 +14,6 @@ services:
 
   media_worker:
     image: sithtoast/zer0-stream-media:latest
-    build: null
     ports:
       - "${RTMP_PORT:-1935}:1935"
       - "${HLS_HTTP_PORT:-8080}:8080"
