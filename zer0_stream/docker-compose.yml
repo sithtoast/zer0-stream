@@ -1,6 +1,7 @@
 services:
   app:
     build: .
+    image: sithtoast/zer0-stream:latest
     container_name: zer0-stream
     ports:
       - "4000:4000"
@@ -17,6 +18,7 @@ services:
     build:
       context: ..
       dockerfile: media_worker/Dockerfile
+    image: sithtoast/zer0-stream-media:latest
     container_name: zer0-stream-media
     ports:
       - "1935:1935"
