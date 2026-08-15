@@ -12,3 +12,19 @@ services:
       SECRET_KEY_BASE: changeme
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
     restart: unless-stopped
+
+  media_worker:
+    build:
+      context: ..
+      dockerfile: media_worker/Dockerfile
+    container_name: zer0-stream-media
+    ports:
+      - "1935:1935"
+      - "8080:8080"
+    environment:
+      MIX_ENV: prod
+      CONTROL_PLANE_URL: http://app:4000
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:-dev-playback-secret}
+    depends_on:
+      - app
+    restart: unless-stopped
