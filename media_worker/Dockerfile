@@ -14,6 +14,9 @@ COPY boombox_runtime/mix.exs boombox_runtime/mix.lock ./boombox_runtime/
 
 RUN mix local.hex --force && mix local.rebar --force
 RUN cd /app/media_worker && mix deps.get
+RUN MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox \
+    mix local.hex --force && \
+    MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix local.rebar --force
 RUN cd /app/boombox_runtime && MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix deps.get
 
 COPY media_worker ./media_worker
