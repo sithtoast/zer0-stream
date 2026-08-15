@@ -16,7 +16,7 @@ jobs:
         include:
           - name: zer0-stream
             context: zer0_stream
-            file: Dockerfile
+            file: zer0_stream/Dockerfile
           - name: zer0-stream-media
             context: .
             file: media_worker/Dockerfile
