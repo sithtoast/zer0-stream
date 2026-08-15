@@ -39,6 +39,8 @@ COPY --from=builder /app/media_worker /app/media_worker
 COPY --from=builder /app/boombox_runtime /app/boombox_runtime
 COPY --from=builder /app/.mix-boombox /app/.mix-boombox
 COPY --from=builder /app/.hex-boombox /app/.hex-boombox
+COPY --from=builder /root/.mix /app/.mix-media
+COPY --from=builder /root/.hex /app/.hex-media
 
 ENV MIX_ENV=prod \
     MIX_HOME=/app/.mix-media \

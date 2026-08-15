@@ -23,9 +23,14 @@ COPY --from=builder /app/deps /app/deps
 COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/config /app/config
 COPY --from=builder /app/mix.exs /app/mix.exs
+COPY --from=builder /app/mix.lock /app/mix.lock
 COPY --from=builder /app/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --from=builder /root/.mix /app/.mix
+COPY --from=builder /root/.hex /app/.hex
 
 RUN chmod +x /app/docker-entrypoint.sh
+
+ENV MIX_ENV=prod MIX_HOME=/app/.mix HEX_HOME=/app/.hex
 
 EXPOSE 4000
 
