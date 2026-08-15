@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    container_name: zer0-stream
+    ports:
+      - "4000:4000"
+    environment:
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      PHX_HOST: localhost
+      PORT: 4000
+      SECRET_KEY_BASE: changeme
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    restart: unless-stopped

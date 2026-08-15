@@ -1,0 +1,37 @@
+# Elixir and Mix build artifacts
+**/_build/
+**/cover/
+**/deps/
+**/doc/
+**/tmp/
+
+# Local Elixir/Mix metadata
+.mix/
+.hex/
+.mix-media/
+
+# Media worker runtime output
+media_worker/priv/hls/
+media_worker/priv/captures/
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Archive artifacts
+*.ez
+
+# Package tarballs
+zer0_stream-*.tar
+zer0_media-*.tar
+
+# Local environment and runtime files
+.env
+.env.*
+!.env.example
+
+# Phoenix static build assets
+**/priv/static/assets/
+**/priv/static/cache_manifest.json
+
+# Editor and tooling caches
+**/.elixir_ls/

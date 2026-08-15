@@ -1,0 +1,9 @@
+services:
+  app:
+    environment:
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required}
+      PHX_HOST: ${PHX_HOST:?PHX_HOST is required}
+      PORT: ${PORT:-4000}
