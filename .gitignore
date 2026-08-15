@@ -9,6 +9,8 @@
 .mix/
 .hex/
 .mix-media/
+.mix-boombox/
+.hex-boombox/
 
 # Media worker runtime output
 media_worker/priv/hls/

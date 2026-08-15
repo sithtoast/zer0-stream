@@ -9,6 +9,7 @@ defmodule Zer0Media.HLSRouter do
   use Plug.Router
 
   plug(:match)
+  plug(:fetch_query_params)
   plug(:dispatch)
 
   @content_types %{
@@ -23,7 +24,7 @@ defmodule Zer0Media.HLSRouter do
   end
 
   get "/hls-boombox/*path" do
-    serve_file(conn, path, boombox_hls_dir())
+    serve_file(conn, path, boombox_hls_dir(), true)
   end
 
   match _ do
@@ -31,13 +32,14 @@ defmodule Zer0Media.HLSRouter do
   end
 
   defp serve_file(conn, path_segments) do
-    serve_file(conn, path_segments, hls_dir())
+    serve_file(conn, path_segments, hls_dir(), false)
   end
 
-  defp serve_file(conn, path_segments, root_dir) do
+  defp serve_file(conn, path_segments, root_dir, protected?) do
     conn = put_cors_headers(conn)
     base = Path.expand(root_dir)
     requested = Path.join([base | path_segments]) |> Path.expand()
+    session_id = boombox_session_id(path_segments)
 
     cond do
       not String.starts_with?(requested, base <> "/") ->
@@ -45,6 +47,17 @@ defmodule Zer0Media.HLSRouter do
 
       not File.regular?(requested) ->
         send_resp(conn, 404, "not found")
+
+      protected? and not Zer0Media.PlaybackToken.valid?(conn.query_params["token"], session_id) ->
+        send_resp(conn, 401, "unauthorized")
+
+      protected? and Path.extname(requested) == ".m3u8" ->
+        body = requested |> File.read!() |> normalize_boombox_playlist(conn.query_params["token"])
+
+        conn
+        |> put_resp_content_type(content_type(requested))
+        |> put_resp_header("cache-control", "no-cache")
+        |> send_resp(200, body)
 
       true ->
         conn
@@ -61,6 +74,33 @@ defmodule Zer0Media.HLSRouter do
   defp content_type(path) do
     Map.get(@content_types, Path.extname(path), "application/octet-stream")
   end
+
+  defp normalize_boombox_playlist(body, token) do
+    body
+    |> String.replace(~r/CODECS=",mp4a\.40\.2"/, ~s(CODECS="avc1.64001f,mp4a.40.2"))
+    |> String.split("\n")
+    |> Enum.map(&append_playlist_token(&1, token))
+    |> Enum.join("\n")
+  end
+
+  defp append_playlist_token(line, token) do
+    cond do
+      String.starts_with?(line, "#EXT-X-MAP:URI=\"") ->
+        Regex.replace(~r/URI="([^"]+)"/, line, "URI=\"\\1?token=#{token}\"")
+
+      line == "" or String.starts_with?(line, "#") ->
+        line
+
+      true ->
+        "#{line}?token=#{token}"
+    end
+  end
+
+  defp boombox_session_id(["stream-session-" <> session_id | _]) do
+    session_id
+  end
+
+  defp boombox_session_id(_path_segments), do: nil
 
   defp hls_dir do
     Application.get_env(:zer0_media, :hls_dir, "priv/hls")

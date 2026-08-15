@@ -129,29 +129,35 @@ plane is not running at `http://localhost:4000`.
 
 ## Temporary Boombox packaging probe
 
-The worker can optionally fan out an authorized ingest to a second RTMP endpoint
-for Boombox to consume. Set `BOOMBOX_RELAY_URL` to an RTMP publish URL; when it
-is unset, the normal worker path is unchanged.
+The worker uses the supervised Boombox path by default. Each authorized session
+gets its own local RTMP listener and Boombox process. To temporarily roll back
+to the legacy direct HLS path, set `LEGACY_HLS_MODE=true`.
 
-The relay URL must be backed by an RTMP server that accepts publishing and allows
-another client to read the published stream. The worker's Membrane RTMP server is
-an ingest server only, so it cannot serve as this relay endpoint by itself.
-
-Start the worker with the relay enabled:
+Boombox lives in the sibling `boombox_runtime/` Mix app because its dependency
+graph is incompatible with the media worker's control-plane dependencies. Build
+it once before starting the worker (and during deployment):
 
 ```sh
-BOOMBOX_RELAY_URL=rtmp://127.0.0.1:1936/live/boombox-test \
+cd ../boombox_runtime
+MIX_HOME=../.mix-boombox HEX_HOME=../.hex-boombox mix deps.get
+MIX_HOME=../.mix-boombox HEX_HOME=../.hex-boombox mix compile
+```
+
+The worker starts `boombox_runtime` automatically for each live session; no
+standalone probe process or Docker RTMP relay is required.
+
+Start the worker in Boombox mode:
+
+```sh
 mix run -e '{:ok, _pid} = Zer0Media.RTMPServer.start_link(port: 1935); Process.sleep(:infinity)'
 ```
 
-Then run the isolated Boombox probe against the same published URL:
-
-```sh
-BOOMBOX_INPUT_URL=rtmp://127.0.0.1:1936/live/boombox-test \
-MIX_INSTALL_DIR="$PWD/../.mix-install-boombox" \
-elixir priv/boombox_probe.exs
+OBS still publishes to `rtmp://localhost:1935/live/<stream-key>`. The worker
+starts the Boombox process automatically and writes
+`priv/hls-boombox/stream-session-<session-id>.m3u8`, served at
+`http://localhost:8080/hls-boombox/stream-session-<session-id>.m3u8`. The
+standalone probe remains available for isolated experiments, but is no longer
+needed for the supervised worker path.
 ```
 
-The probe writes `priv/hls-boombox/index.m3u8`. This path is intentionally
-temporary and separate from the production HLS output.
 

@@ -17,6 +17,27 @@ defmodule Zer0StreamWeb.StreamController do
     json(conn, %{streams: Enum.map(streams, &stream_json/1)})
   end
 
+  def playback(conn, %{"id" => id}) do
+    case Streams.get_live_session(id) do
+      nil ->
+        send_resp(conn, :not_found, "")
+
+      session ->
+        base_url = Application.get_env(:zer0_stream, :playback_base_url, "http://localhost:8080")
+        token = Zer0Stream.PlaybackToken.issue(session.id)
+
+        playlist =
+          "#{base_url}/hls-boombox/stream-session-#{session.id}/master.m3u8?token=#{token}"
+
+        json(conn, %{
+          stream_id: session.stream_id,
+          session_id: session.id,
+          playback_url: playlist,
+          playback_expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
+        })
+    end
+  end
+
   def create_creator(conn, params) do
     case Streams.create_creator(%{
            external_id: Map.get(params, "external_id"),

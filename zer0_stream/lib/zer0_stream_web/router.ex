@@ -25,11 +25,13 @@ defmodule Zer0StreamWeb.Router do
 
     get "/health", StreamController, :health
     get "/streams", StreamController, :index
+    get "/streams/:id/playback", StreamController, :playback
     post "/control/creators", StreamController, :create_creator
     post "/control/streams", StreamController, :create_persistent
     post "/control/streams/:id/keys", StreamController, :rotate_key
     post "/ingest/rtmp/authorize", IngestController, :authorize
     post "/ingest/rtmp/:connection_id/stop", IngestController, :stop
+    post "/ingest/rtmp/reconcile", IngestController, :reconcile
   end
 
   # Enable LiveDashboard in development

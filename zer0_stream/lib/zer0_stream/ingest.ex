@@ -45,6 +45,24 @@ defmodule Zer0Stream.Ingest do
     end)
   end
 
+  def reconcile_sessions do
+    now = DateTime.utc_now()
+
+    Repo.transaction(fn ->
+      {ended_count, _} =
+        Repo.update_all(
+          from(session in StreamSession, where: session.status == "live"),
+          set: [status: "ended", ended_at: now, updated_at: now]
+        )
+
+      Repo.update_all(from(stream in Stream, where: stream.status == "live"),
+        set: [status: "offline", updated_at: now]
+      )
+
+      ended_count
+    end)
+  end
+
   defp start_session(stream, stream_key_id, connection_id) do
     now = DateTime.utc_now()
 

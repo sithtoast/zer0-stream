@@ -35,6 +35,11 @@ defmodule Zer0StreamWeb.IngestController do
     end
   end
 
+  def reconcile(conn, _params) do
+    {:ok, ended_count} = Zer0Stream.Ingest.reconcile_sessions()
+    json(conn, %{ended_sessions: ended_count})
+  end
+
   defp session_json(session) do
     %{
       id: session.id,

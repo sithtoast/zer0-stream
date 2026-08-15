@@ -46,6 +46,14 @@ if config_env() == :prod do
 
   config :zer0_stream, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  config :zer0_stream,
+         :playback_base_url,
+         System.get_env("PLAYBACK_BASE_URL", "http://localhost:8080")
+
+  config :zer0_stream,
+         :playback_token_secret,
+         System.get_env("PLAYBACK_TOKEN_SECRET", "dev-playback-secret")
+
   config :zer0_stream, Zer0StreamWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [

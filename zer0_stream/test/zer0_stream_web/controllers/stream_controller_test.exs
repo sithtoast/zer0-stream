@@ -50,4 +50,24 @@ defmodule Zer0StreamWeb.StreamControllerTest do
 
     assert response(conn, 404) == ""
   end
+
+  test "returns the playback URL for a live stream session", %{conn: conn} do
+    {:ok, creator} = Streams.create_creator(%{external_id: "creator-playback"})
+    {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Playback Test"})
+    {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
+    {:ok, session} = Zer0Stream.Ingest.authorize_rtmp(token, "playback-connection")
+
+    conn = get(conn, "/api/streams/#{stream.id}/playback")
+    assert %{"playback_url" => url, "session_id" => session_id} = json_response(conn, 200)
+    assert session_id == session.id
+    assert url =~ "/hls-boombox/stream-session-#{session.id}/master.m3u8?token="
+  end
+
+  test "does not return playback for an offline stream", %{conn: conn} do
+    {:ok, creator} = Streams.create_creator(%{external_id: "creator-offline"})
+    {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Offline Test"})
+
+    conn = get(conn, "/api/streams/#{stream.id}/playback")
+    assert response(conn, 404) == ""
+  end
 end

@@ -10,6 +10,10 @@ defmodule Zer0Media.ControlPlane do
     request(:post, "/api/ingest/rtmp/#{URI.encode_www_form(connection_id)}/stop", %{})
   end
 
+  def reconcile do
+    request(:post, "/api/ingest/rtmp/reconcile", %{})
+  end
+
   defp request(method, path, payload) do
     url = Application.get_env(:zer0_media, :control_plane_url, "http://localhost:4000") <> path
 

@@ -2,7 +2,7 @@ defmodule Zer0Stream.Streams do
   import Ecto.Query, only: [from: 2]
 
   alias Zer0Stream.Repo
-  alias Zer0Stream.Streams.{Creator, Stream, StreamKey}
+  alias Zer0Stream.Streams.{Creator, Stream, StreamKey, StreamSession}
 
   def create_creator(attrs) do
     %Creator{}
@@ -22,6 +22,17 @@ defmodule Zer0Stream.Streams do
 
   def list_streams do
     Repo.all(from(stream in Stream, preload: [:creator]))
+  end
+
+  def get_live_session(stream_id) do
+    Repo.one(
+      from(session in StreamSession,
+        where: session.stream_id == ^stream_id and session.status == "live",
+        order_by: [desc: session.started_at],
+        limit: 1,
+        preload: [stream: :creator]
+      )
+    )
   end
 
   def rotate_stream_key(%Stream{id: stream_id}) do

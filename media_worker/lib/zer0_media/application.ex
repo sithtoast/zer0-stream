@@ -8,6 +8,7 @@ defmodule Zer0Media.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      Zer0Media.BoomboxSessionSupervisor,
       {Bandit, plug: Zer0Media.HLSRouter, port: http_port(), scheme: :http}
     ]
 
