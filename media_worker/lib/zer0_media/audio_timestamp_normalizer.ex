@@ -4,9 +4,9 @@ defmodule Zer0Media.AudioTimestampNormalizer do
   def_input_pad(:input, accepted_format: %Membrane.AAC{})
   def_output_pad(:output, accepted_format: %Membrane.AAC{})
 
-  defstruct rate: 1.0, input_origin: nil
+  defstruct rate: 1.0
 
-  @type t :: %__MODULE__{rate: float(), input_origin: Membrane.Time.t() | nil}
+  @type t :: %__MODULE__{rate: float()}
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
@@ -15,21 +15,7 @@ defmodule Zer0Media.AudioTimestampNormalizer do
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    case Membrane.Buffer.get_dts_or_pts(buffer) do
-      nil ->
-        {[buffer: {:output, buffer}], state}
-
-      timestamp ->
-        origin = state.input_origin || timestamp
-
-        corrected_buffer = %{
-          buffer
-          | pts: correct_timestamp(buffer.pts, origin, state.rate),
-            dts: correct_timestamp(buffer.dts, origin, state.rate)
-        }
-
-        {[buffer: {:output, corrected_buffer}], %{state | input_origin: origin}}
-    end
+    {[buffer: {:output, buffer}], state}
   end
 
   @spec correct_timestamp(Membrane.Time.t() | nil, Membrane.Time.t(), float()) ::

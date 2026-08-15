@@ -12,6 +12,7 @@
 
 # Media worker runtime output
 media_worker/priv/hls/
+media_worker/priv/hls-boombox/
 media_worker/priv/captures/
 
 # If the VM crashes, it generates a dump, let's ignore it too.

@@ -11,6 +11,15 @@ defmodule Zer0Media.HLSPipeline do
     safety_delay = configured_duration(:hls_safety_delay, segment_duration)
     audio_rate = configured_rate(:aac_timestamp_rate, 1.0)
 
+    # The muxer only cuts a segment at the next keyframe AFTER segment_duration is
+    # reached, so a real segment is always segment_duration + up to one GOP long.
+    # The packager separately enforces target_segment_duration as a hard RFC 8216
+    # ceiling and rejects any segment exceeding it, so the ceiling must be given
+    # real headroom above the cut trigger or every segment eventually gets rejected
+    # regardless of encoder/GOP jitter. Default margin doubles the cut trigger.
+    target_segment_duration =
+      configured_duration(:hls_target_segment_duration, segment_duration * 2)
+
     structure = [
       child(:source, %Membrane.RTMP.SourceBin{client_ref: opts[:client_ref]})
       |> via_out(:audio)
@@ -51,7 +60,7 @@ defmodule Zer0Media.HLSPipeline do
         storage: storage,
         manifest_uri: URI.parse("master.m3u8"),
         playlist_mode: {:event, safety_delay},
-        target_segment_duration: segment_duration,
+        target_segment_duration: target_segment_duration,
         trim_align?: true
       })
     ]

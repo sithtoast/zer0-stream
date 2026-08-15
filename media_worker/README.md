@@ -127,3 +127,31 @@ or completed stream session.
 Set `CONTROL_PLANE_URL` through application configuration when the control
 plane is not running at `http://localhost:4000`.
 
+## Temporary Boombox packaging probe
+
+The worker can optionally fan out an authorized ingest to a second RTMP endpoint
+for Boombox to consume. Set `BOOMBOX_RELAY_URL` to an RTMP publish URL; when it
+is unset, the normal worker path is unchanged.
+
+The relay URL must be backed by an RTMP server that accepts publishing and allows
+another client to read the published stream. The worker's Membrane RTMP server is
+an ingest server only, so it cannot serve as this relay endpoint by itself.
+
+Start the worker with the relay enabled:
+
+```sh
+BOOMBOX_RELAY_URL=rtmp://127.0.0.1:1936/live/boombox-test \
+mix run -e '{:ok, _pid} = Zer0Media.RTMPServer.start_link(port: 1935); Process.sleep(:infinity)'
+```
+
+Then run the isolated Boombox probe against the same published URL:
+
+```sh
+BOOMBOX_INPUT_URL=rtmp://127.0.0.1:1936/live/boombox-test \
+MIX_INSTALL_DIR="$PWD/../.mix-install-boombox" \
+elixir priv/boombox_probe.exs
+```
+
+The probe writes `priv/hls-boombox/index.m3u8`. This path is intentionally
+temporary and separate from the production HLS output.
+

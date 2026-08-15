@@ -13,28 +13,8 @@ defmodule Zer0StreamWeb.StreamController do
   end
 
   def index(conn, _params) do
-    streams = Zer0Stream.StreamRegistry.list_streams()
-    json(conn, %{streams: streams})
-  end
-
-  def create(conn, %{"stream_id" => stream_id} = params) do
-    stream =
-      Zer0Stream.StreamRegistry.create_stream(stream_id, %{
-        title: Map.get(params, "title", "untitled stream"),
-        status: Map.get(params, "status", "offline"),
-        creator_id: Map.get(params, "creator_id", "unknown"),
-        started_at: Map.get(params, "started_at")
-      })
-
-    conn
-    |> put_status(:created)
-    |> json(%{stream: stream})
-  end
-
-  def create(conn, _params) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "stream_id is required"})
+    streams = Streams.list_streams()
+    json(conn, %{streams: Enum.map(streams, &stream_json/1)})
   end
 
   def create_creator(conn, params) do

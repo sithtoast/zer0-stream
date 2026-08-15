@@ -25,7 +25,6 @@ defmodule Zer0StreamWeb.Router do
 
     get "/health", StreamController, :health
     get "/streams", StreamController, :index
-    post "/streams", StreamController, :create
     post "/control/creators", StreamController, :create_creator
     post "/control/streams", StreamController, :create_persistent
     post "/control/streams/:id/keys", StreamController, :rotate_key

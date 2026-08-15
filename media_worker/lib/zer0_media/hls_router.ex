@@ -22,13 +22,21 @@ defmodule Zer0Media.HLSRouter do
     serve_file(conn, path)
   end
 
+  get "/hls-boombox/*path" do
+    serve_file(conn, path, boombox_hls_dir())
+  end
+
   match _ do
     send_resp(conn, 404, "not found")
   end
 
   defp serve_file(conn, path_segments) do
+    serve_file(conn, path_segments, hls_dir())
+  end
+
+  defp serve_file(conn, path_segments, root_dir) do
     conn = put_cors_headers(conn)
-    base = hls_dir() |> Path.expand()
+    base = Path.expand(root_dir)
     requested = Path.join([base | path_segments]) |> Path.expand()
 
     cond do
@@ -57,4 +65,6 @@ defmodule Zer0Media.HLSRouter do
   defp hls_dir do
     Application.get_env(:zer0_media, :hls_dir, "priv/hls")
   end
+
+  defp boombox_hls_dir, do: Path.join(File.cwd!(), "priv/hls-boombox")
 end

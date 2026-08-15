@@ -1,6 +1,6 @@
 defmodule Zer0Media.RTMPServer do
   alias Membrane.RTMP.Source.ClientHandlerImpl
-  alias Zer0Media.{ControlPlane, HLSPipeline}
+  alias Zer0Media.{ControlPlane, HLSPipeline, RTMPRelayPipeline}
 
   def start_link(opts \\ []) do
     Membrane.RTMPServer.start_link(
@@ -23,6 +23,8 @@ defmodule Zer0Media.RTMPServer do
             parent: self()
           )
 
+        maybe_start_relay(client_ref)
+
         ClientHandlerImpl
 
       {:error, reason} ->
@@ -35,5 +37,26 @@ defmodule Zer0Media.RTMPServer do
     path = Path.join(output_dir, "stream-session-#{session_id}")
     File.mkdir_p!(path)
     path
+  end
+
+  defp maybe_start_relay(client_ref) do
+    case System.get_env("BOOMBOX_RELAY_URL") do
+      nil ->
+        :ok
+
+      relay_url ->
+        case Membrane.Pipeline.start_link(RTMPRelayPipeline,
+               client_ref: client_ref,
+               relay_url: relay_url,
+               parent: self()
+             ) do
+          {:ok, _supervisor_pid, _pipeline_pid} ->
+            :ok
+
+          {:error, reason} ->
+            require Logger
+            Logger.error("Unable to start Boombox RTMP relay: #{inspect(reason)}")
+        end
+    end
   end
 end
