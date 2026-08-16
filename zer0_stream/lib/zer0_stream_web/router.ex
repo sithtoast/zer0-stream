@@ -14,12 +14,6 @@ defmodule Zer0StreamWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/", Zer0StreamWeb do
-    pipe_through :browser
-
-    get "/", PageController, :home
-  end
-
   scope "/api", Zer0StreamWeb do
     pipe_through :api
 
