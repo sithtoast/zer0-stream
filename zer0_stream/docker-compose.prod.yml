@@ -24,3 +24,8 @@ services:
     depends_on:
       - app
     restart: unless-stopped
+
+networks:
+  default:
+    name: dc
+    external: true
