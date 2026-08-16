@@ -8,11 +8,12 @@ defmodule Zer0StreamWeb.IngestControllerTest do
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "HTTP Ingest"})
     {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
 
+    params = %{stream_key: token, connection_id: "http-connection-1"}
+
     conn =
-      post(conn, "/api/ingest/rtmp/authorize", %{
-        stream_key: token,
-        connection_id: "http-connection-1"
-      })
+      conn
+      |> service_conn(:post, "/api/ingest/rtmp/authorize", params)
+      |> post("/api/ingest/rtmp/authorize", params)
 
     assert %{"session" => session, "stream" => response_stream} = json_response(conn, 201)
     assert session["connection_id"] == "http-connection-1"
@@ -21,11 +22,12 @@ defmodule Zer0StreamWeb.IngestControllerTest do
   end
 
   test "rejects an invalid RTMP stream key", %{conn: conn} do
+    params = %{stream_key: "invalid-key", connection_id: "http-connection-2"}
+
     conn =
-      post(conn, "/api/ingest/rtmp/authorize", %{
-        stream_key: "invalid-key",
-        connection_id: "http-connection-2"
-      })
+      conn
+      |> service_conn(:post, "/api/ingest/rtmp/authorize", params)
+      |> post("/api/ingest/rtmp/authorize", params)
 
     assert json_response(conn, 401) == %{"error" => "invalid stream key"}
   end
@@ -35,13 +37,23 @@ defmodule Zer0StreamWeb.IngestControllerTest do
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "HTTP Stop"})
     {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
 
-    post(conn, "/api/ingest/rtmp/authorize", %{
-      stream_key: token,
-      connection_id: "http-connection-3"
-    })
+    authorize_params = %{stream_key: token, connection_id: "http-connection-3"}
 
-    conn = post(build_conn(), "/api/ingest/rtmp/http-connection-3/stop")
+    conn
+    |> service_conn(:post, "/api/ingest/rtmp/authorize", authorize_params)
+    |> post("/api/ingest/rtmp/authorize", authorize_params)
+
+    conn =
+      build_conn()
+      |> service_conn(:post, "/api/ingest/rtmp/http-connection-3/stop", %{request_id: "stop-3"})
+      |> post("/api/ingest/rtmp/http-connection-3/stop", %{request_id: "stop-3"})
 
     assert %{"session" => %{"status" => "ended"}} = json_response(conn, 200)
+  end
+
+  test "rejects an unsigned ingest request", %{conn: conn} do
+    conn = post(conn, "/api/ingest/rtmp/reconcile", %{})
+
+    assert json_response(conn, 401) == %{"error" => "unauthorized"}
   end
 end

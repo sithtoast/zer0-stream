@@ -116,9 +116,9 @@ http://localhost:8080/hls/stream-session-<id>/master.m3u8
 ```
 
 Requests outside of the configured `hls_dir` are rejected (403), and missing
-files return 404. Responses include a permissive CORS header so a browser
-player on a different origin/port can fetch the manifest and segments; this
-should be tightened once signed playback tokens are added.
+files return 404. Browser CORS is restricted to the comma-separated origins in
+`HLS_ALLOWED_ORIGINS`; production must set this value to the zer0.tv player
+origins, such as `https://zer0.tv,https://www.zer0.tv`.
 
 Test playback by pointing Safari (native HLS support) or an HLS-capable
 player (e.g. `hls.js`, VLC, `ffplay`) at the `master.m3u8` URL for an active

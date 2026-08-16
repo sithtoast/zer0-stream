@@ -14,18 +14,32 @@ defmodule Zer0StreamWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :service_auth do
+    plug Zer0StreamWeb.Plugs.ServiceAuth
+  end
+
   scope "/api", Zer0StreamWeb do
     pipe_through :api
 
     get "/health", StreamController, :health
     get "/streams", StreamController, :index
     get "/streams/:id/playback", StreamController, :playback
-    post "/control/creators", StreamController, :create_creator
-    post "/control/streams", StreamController, :create_persistent
-    post "/control/streams/:id/keys", StreamController, :rotate_key
-    post "/ingest/rtmp/authorize", IngestController, :authorize
-    post "/ingest/rtmp/:connection_id/stop", IngestController, :stop
-    post "/ingest/rtmp/reconcile", IngestController, :reconcile
+  end
+
+  scope "/api/control", Zer0StreamWeb do
+    pipe_through [:api, :service_auth]
+
+    post "/creators", StreamController, :create_creator
+    post "/streams", StreamController, :create_persistent
+    post "/streams/:id/keys", StreamController, :rotate_key
+  end
+
+  scope "/api/ingest", Zer0StreamWeb do
+    pipe_through [:api, :service_auth]
+
+    post "/rtmp/authorize", IngestController, :authorize
+    post "/rtmp/:connection_id/stop", IngestController, :stop
+    post "/rtmp/reconcile", IngestController, :reconcile
   end
 
   # Enable LiveDashboard in development

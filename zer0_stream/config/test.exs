@@ -15,6 +15,8 @@ config :zer0_stream, Zer0StreamWeb.Endpoint,
   secret_key_base: "EpYxNlLkKXb5acxn8pl/5f8cleJ6yAh/vLkQUnoGPaQAL1+/pBwPY+/zS+etirfx",
   server: false
 
+config :zer0_stream, :service_auth_secret, "test-service-auth-secret"
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

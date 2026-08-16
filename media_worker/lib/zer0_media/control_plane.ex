@@ -16,8 +16,15 @@ defmodule Zer0Media.ControlPlane do
 
   defp request(method, path, payload) do
     url = Application.get_env(:zer0_media, :control_plane_url, "http://localhost:4000") <> path
+    {timestamp, signature} = Zer0Media.ControlPlaneAuth.sign(method, path, payload)
 
-    case Req.request(method: method, url: url, json: payload, receive_timeout: 5_000) do
+    case Req.request(
+           method: method,
+           url: url,
+           json: payload,
+           headers: [{"x-zer0-timestamp", timestamp}, {"x-zer0-signature", signature}],
+           receive_timeout: 5_000
+         ) do
       {:ok, %{status: 201, body: %{"session" => session}}} -> {:ok, session}
       {:ok, %{status: 200}} -> :ok
       {:ok, %{status: 401}} -> {:error, :unauthorized}

@@ -68,7 +68,26 @@ defmodule Zer0Media.HLSRouter do
   end
 
   defp put_cors_headers(conn) do
-    put_resp_header(conn, "access-control-allow-origin", "*")
+    case get_req_header(conn, "origin") do
+      [origin] ->
+        if origin in allowed_origins() do
+          conn
+          |> put_resp_header("access-control-allow-origin", origin)
+          |> put_resp_header("vary", "Origin")
+        else
+          conn
+        end
+
+      _ ->
+        conn
+    end
+  end
+
+  defp allowed_origins do
+    Application.get_env(:zer0_media, :hls_allowed_origins) ||
+      System.get_env("HLS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:4000")
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
   end
 
   defp content_type(path) do

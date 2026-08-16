@@ -4,8 +4,12 @@ defmodule Zer0StreamWeb.StreamControllerTest do
   alias Zer0Stream.Streams
 
   test "creates a creator", %{conn: conn} do
+    params = %{external_id: "creator-1", display_name: "Creator One"}
+
     conn =
-      post(conn, "/api/control/creators", %{external_id: "creator-1", display_name: "Creator One"})
+      conn
+      |> service_conn(:post, "/api/control/creators", params)
+      |> post("/api/control/creators", params)
 
     assert %{"creator" => creator} = json_response(conn, 200)
     assert creator["external_id"] == "creator-1"
@@ -13,7 +17,12 @@ defmodule Zer0StreamWeb.StreamControllerTest do
   end
 
   test "rejects a creator without an external id", %{conn: conn} do
-    conn = post(conn, "/api/control/creators", %{display_name: "Missing ID"})
+    params = %{display_name: "Missing ID"}
+
+    conn =
+      conn
+      |> service_conn(:post, "/api/control/creators", params)
+      |> post("/api/control/creators", params)
 
     assert %{"errors" => %{"external_id" => ["can't be blank"]}} = json_response(conn, 422)
   end
@@ -21,7 +30,12 @@ defmodule Zer0StreamWeb.StreamControllerTest do
   test "creates a persistent stream for a creator", %{conn: conn} do
     {:ok, creator} = Streams.create_creator(%{external_id: "creator-2"})
 
-    conn = post(conn, "/api/control/streams", %{creator_id: creator.id, title: "Live Test"})
+    params = %{creator_id: creator.id, title: "Live Test"}
+
+    conn =
+      conn
+      |> service_conn(:post, "/api/control/streams", params)
+      |> post("/api/control/streams", params)
 
     assert %{"stream" => stream} = json_response(conn, 201)
     assert stream["creator_id"] == creator.id
@@ -32,11 +46,20 @@ defmodule Zer0StreamWeb.StreamControllerTest do
   test "rotates keys and revokes the previous key", %{conn: conn} do
     {:ok, creator} = Streams.create_creator(%{external_id: "creator-3"})
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Key Test"})
+    params = %{request_id: "rotate-key-1"}
 
-    first_conn = post(conn, "/api/control/streams/#{stream.id}/keys")
+    first_conn =
+      conn
+      |> service_conn(:post, "/api/control/streams/#{stream.id}/keys", params)
+      |> post("/api/control/streams/#{stream.id}/keys", params)
+
     assert %{"stream_key" => %{"token" => first_token}} = json_response(first_conn, 200)
 
-    second_conn = post(build_conn(), "/api/control/streams/#{stream.id}/keys")
+    second_conn =
+      build_conn()
+      |> service_conn(:post, "/api/control/streams/#{stream.id}/keys", params)
+      |> post("/api/control/streams/#{stream.id}/keys", params)
+
     assert %{"stream_key" => %{"token" => second_token}} = json_response(second_conn, 200)
     assert first_token != second_token
 
@@ -46,9 +69,20 @@ defmodule Zer0StreamWeb.StreamControllerTest do
   end
 
   test "returns not found when rotating a missing stream key", %{conn: conn} do
-    conn = post(conn, "/api/control/streams/999999/keys")
+    params = %{request_id: "rotate-key-missing"}
+
+    conn =
+      conn
+      |> service_conn(:post, "/api/control/streams/999999/keys", params)
+      |> post("/api/control/streams/999999/keys", params)
 
     assert response(conn, 404) == ""
+  end
+
+  test "rejects an unsigned control request", %{conn: conn} do
+    conn = post(conn, "/api/control/creators", %{external_id: "creator-unsigned"})
+
+    assert json_response(conn, 401) == %{"error" => "unauthorized"}
   end
 
   test "returns the playback URL for a live stream session", %{conn: conn} do

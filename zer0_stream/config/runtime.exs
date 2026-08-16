@@ -54,6 +54,21 @@ if config_env() == :prod do
          :playback_token_secret,
          System.get_env("PLAYBACK_TOKEN_SECRET", "dev-playback-secret")
 
+  config :zer0_stream,
+         :service_auth_secret,
+         System.get_env("SERVICE_AUTH_SECRET") ||
+           raise("environment variable SERVICE_AUTH_SECRET is missing")
+
+  lifecycle_webhook_url = System.get_env("LIFECYCLE_WEBHOOK_URL")
+  lifecycle_webhook_secret = System.get_env("LIFECYCLE_WEBHOOK_SECRET")
+
+  if lifecycle_webhook_url not in [nil, ""] and lifecycle_webhook_secret in [nil, ""] do
+    raise "environment variable LIFECYCLE_WEBHOOK_SECRET is required when LIFECYCLE_WEBHOOK_URL is set"
+  end
+
+  config :zer0_stream, :lifecycle_webhook_url, lifecycle_webhook_url
+  config :zer0_stream, :lifecycle_webhook_secret, lifecycle_webhook_secret
+
   config :zer0_stream, Zer0StreamWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [

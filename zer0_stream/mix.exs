@@ -19,7 +19,7 @@ defmodule Zer0Stream.MixProject do
   def application do
     [
       mod: {Zer0Stream.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :inets]
     ]
   end
 
