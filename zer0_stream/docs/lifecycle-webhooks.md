@@ -26,5 +26,8 @@ The receiver verifies the following headers:
   `LIFECYCLE_WEBHOOK_SECRET` over the exact UTF-8 payload
   `"<timestamp>\n<raw request body>"`.
 
-Webhook delivery is asynchronous and does not block ingest authorization or
-disconnect handling. The receiver must deduplicate with the envelope `id`.
+Events are persisted transactionally with the associated stream transition.
+Delivery is asynchronous and does not block ingest authorization or disconnect
+handling. Failed deliveries retry with exponential backoff up to 10 attempts;
+the receiver must deduplicate with the envelope `id` because a sender crash
+between sending and recording success can cause a repeat delivery.

@@ -17,6 +17,13 @@ services:
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
       DB_STARTUP_RETRIES: ${DB_STARTUP_RETRIES:-30}
       DB_STARTUP_DELAY: ${DB_STARTUP_DELAY:-2}
+    healthcheck:
+      test: ["CMD-SHELL", "elixir -e 'Application.ensure_all_started(:inets); case :httpc.request(~c\"http://127.0.0.1:4000/api/ready\") do {:ok, {{_, 200, _}, _, _}} -> System.halt(0); _ -> System.halt(1) end'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
 
   media_worker:
     image: sithtoast/zer0-stream-media:latest
@@ -31,6 +38,12 @@ services:
       PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?PLAYBACK_TOKEN_SECRET is required}
     depends_on:
       - app
+    healthcheck:
+      test: ["CMD-SHELL", "elixir -e 'Application.ensure_all_started(:inets); case :httpc.request(~c\"http://127.0.0.1:8080/health\") do {:ok, {{_, 200, _}, _, _}} -> System.halt(0); _ -> System.halt(1) end'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
 networks:

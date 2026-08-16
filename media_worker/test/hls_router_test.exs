@@ -6,6 +6,13 @@ defmodule Zer0Media.HLSRouterTest do
 
   alias Zer0Media.HLSRouter
 
+  test "reports media worker health" do
+    conn = HLSRouter.call(conn(:get, "/health"), [])
+
+    assert conn.status == 200
+    assert conn.resp_body == ~s({"ok":true,"service":"zer0-media","status":"healthy"})
+  end
+
   setup do
     hls_dir = Path.join(System.tmp_dir!(), "zer0-media-hls-#{System.unique_integer([:positive])}")
     File.mkdir_p!(hls_dir)

@@ -12,6 +12,18 @@ defmodule Zer0StreamWeb.StreamController do
     })
   end
 
+  def ready(conn, _params) do
+    case Ecto.Adapters.SQL.query(Zer0Stream.Repo, "SELECT 1") do
+      {:ok, _result} ->
+        json(conn, %{ok: true, service: "zer0-stream", status: "ready"})
+
+      {:error, _reason} ->
+        conn
+        |> put_status(:service_unavailable)
+        |> json(%{ok: false, service: "zer0-stream", status: "unavailable"})
+    end
+  end
+
   def index(conn, _params) do
     streams = Streams.list_streams()
     json(conn, %{streams: Enum.map(streams, &stream_json/1)})

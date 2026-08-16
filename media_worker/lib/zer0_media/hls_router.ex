@@ -19,6 +19,12 @@ defmodule Zer0Media.HLSRouter do
     ".vtt" => "text/vtt"
   }
 
+  get "/health" do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, ~s({"ok":true,"service":"zer0-media","status":"healthy"}))
+  end
+
   get "/hls/*path" do
     serve_file(conn, path)
   end

@@ -3,6 +3,13 @@ defmodule Zer0StreamWeb.StreamControllerTest do
 
   alias Zer0Stream.Streams
 
+  test "reports ready when the database is available", %{conn: conn} do
+    conn = get(conn, "/api/ready")
+
+    assert %{"ok" => true, "service" => "zer0-stream", "status" => "ready"} =
+             json_response(conn, 200)
+  end
+
   test "creates a creator", %{conn: conn} do
     params = %{external_id: "creator-1", display_name: "Creator One"}
 

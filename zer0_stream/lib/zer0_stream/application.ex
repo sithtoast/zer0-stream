@@ -12,7 +12,7 @@ defmodule Zer0Stream.Application do
       Zer0StreamWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:zer0_stream, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Zer0Stream.PubSub},
-      {Task.Supervisor, name: Zer0Stream.WebhookTaskSupervisor},
+      Zer0Stream.WebhookDeliveryWorker,
       # Start a worker by calling: Zer0Stream.Worker.start_link(arg)
       # {Zer0Stream.Worker, arg},
       # Start to serve requests, typically the last entry

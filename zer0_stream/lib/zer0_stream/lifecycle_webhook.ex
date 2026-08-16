@@ -1,17 +1,54 @@
 defmodule Zer0Stream.LifecycleWebhook do
+  import Ecto.Query, only: [from: 2]
+  import Bitwise
+
   require Logger
 
-  def emit(event, data) when is_binary(event) and is_map(data) do
+  alias Zer0Stream.{Repo, WebhookDelivery}
+
+  @max_attempts 10
+
+  def enqueue(event, data) when is_binary(event) and is_map(data) do
     case config() do
       nil ->
         :ok
 
-      %{url: url, secret: secret} ->
+      _config ->
         payload = event_payload(event, data)
 
-        Task.Supervisor.start_child(Zer0Stream.WebhookTaskSupervisor, fn ->
-          deliver(url, secret, payload)
-        end)
+        %WebhookDelivery{}
+        |> WebhookDelivery.changeset(%{
+          event_id: payload.id,
+          event_type: event,
+          payload: payload,
+          next_attempt_at: DateTime.utc_now()
+        })
+        |> Repo.insert()
+        |> case do
+          {:ok, _delivery} -> :ok
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+    end
+  end
+
+  def deliver_pending do
+    case config() do
+      nil ->
+        :ok
+
+      config ->
+        now = DateTime.utc_now()
+
+        deliveries =
+          Repo.all(
+            from(delivery in WebhookDelivery,
+              where: delivery.status == "pending" and delivery.next_attempt_at <= ^now,
+              order_by: [asc: delivery.inserted_at],
+              limit: 20
+            )
+          )
+
+        Enum.each(deliveries, &deliver_and_record(&1, config, now))
     end
   end
 
@@ -40,6 +77,33 @@ defmodule Zer0Stream.LifecycleWebhook do
     }
   end
 
+  defp deliver_and_record(delivery, config, now) do
+    case deliver(config.url, config.secret, delivery.payload) do
+      :ok ->
+        delivery
+        |> WebhookDelivery.changeset(%{status: "delivered", delivered_at: now, last_error: nil})
+        |> Repo.update()
+
+      {:error, reason} ->
+        attempts = delivery.attempts + 1
+
+        attrs =
+          if attempts >= @max_attempts do
+            %{status: "failed", attempts: attempts, last_error: inspect(reason)}
+          else
+            %{
+              attempts: attempts,
+              next_attempt_at: DateTime.add(now, retry_delay_seconds(attempts), :second),
+              last_error: inspect(reason)
+            }
+          end
+
+        delivery
+        |> WebhookDelivery.changeset(attrs)
+        |> Repo.update()
+    end
+  end
+
   defp deliver(url, secret, payload) do
     %{body: body, headers: headers} = signed_request(url, secret, payload)
 
@@ -58,11 +122,15 @@ defmodule Zer0Stream.LifecycleWebhook do
 
       {:ok, {{_, status, _}, _headers, _response_body}} ->
         Logger.warning("Lifecycle webhook delivery failed with status #{status}")
+        {:error, {:http_status, status}}
 
       {:error, reason} ->
         Logger.warning("Lifecycle webhook delivery failed: #{inspect(reason)}")
+        {:error, reason}
     end
   end
+
+  defp retry_delay_seconds(attempts), do: min(1 <<< (attempts - 1), 300)
 
   defp config do
     case Application.get_env(:zer0_stream, :lifecycle_webhook_url) do

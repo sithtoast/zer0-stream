@@ -26,6 +26,7 @@ defmodule Zer0StreamWeb.Router do
     pipe_through :api
 
     get "/health", StreamController, :health
+    get "/ready", StreamController, :ready
     get "/streams", StreamController, :index
   end
 

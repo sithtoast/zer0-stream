@@ -14,7 +14,6 @@ defmodule Zer0Stream.Ingest do
       %{stream: %Stream{} = stream, id: stream_key_id} ->
         case start_session(stream, stream_key_id, connection_id) do
           {:ok, {session, :started}} ->
-            emit_stream_started(session)
             {:ok, session}
 
           {:ok, session, :existing} ->
@@ -53,11 +52,20 @@ defmodule Zer0Stream.Ingest do
                  )
                end
 
-               {Repo.preload(session, stream: :creator), stream_stopped?}
+               session = Repo.preload(session, stream: :creator)
+
+               if stream_stopped? do
+                 :ok =
+                   Zer0Stream.LifecycleWebhook.enqueue(
+                     "stream.stopped",
+                     stream_event_data(session)
+                   )
+               end
+
+               {session, stream_stopped?}
            end
          end) do
       {:ok, {session, true}} ->
-        emit_stream_stopped(session)
         {:ok, session}
 
       {:ok, {session, false}} ->
@@ -108,20 +116,14 @@ defmodule Zer0Stream.Ingest do
             |> Repo.insert()
 
           Repo.update_all(from(s in Stream, where: s.id == ^stream.id), set: [status: "live"])
-          {Repo.preload(session, stream: :creator), :started}
+          session = Repo.preload(session, stream: :creator)
+          :ok = Zer0Stream.LifecycleWebhook.enqueue("stream.started", stream_event_data(session))
+          {session, :started}
         end)
 
       %StreamSession{status: "ended"} ->
         {:error, :connection_id_reused}
     end
-  end
-
-  defp emit_stream_started(session) do
-    Zer0Stream.LifecycleWebhook.emit("stream.started", stream_event_data(session))
-  end
-
-  defp emit_stream_stopped(session) do
-    Zer0Stream.LifecycleWebhook.emit("stream.stopped", stream_event_data(session))
   end
 
   defp stream_event_data(session) do
