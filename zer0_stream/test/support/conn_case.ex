@@ -43,8 +43,11 @@ defmodule Zer0StreamWeb.ConnCase do
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 
-  def service_conn(conn, method, path, params) do
-    {timestamp, signature} = Zer0Stream.ServiceAuth.sign(method, path, params)
+  def service_conn(conn, method, path, params),
+    do: service_conn(conn, :main, method, path, params)
+
+  def service_conn(conn, role, method, path, params) do
+    {timestamp, signature} = Zer0Stream.ServiceAuth.sign(role, method, path, params)
 
     conn
     |> Plug.Conn.put_req_header("x-zer0-timestamp", timestamp)

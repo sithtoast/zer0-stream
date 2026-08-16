@@ -55,9 +55,14 @@ if config_env() == :prod do
          System.get_env("PLAYBACK_TOKEN_SECRET", "dev-playback-secret")
 
   config :zer0_stream,
-         :service_auth_secret,
-         System.get_env("SERVICE_AUTH_SECRET") ||
-           raise("environment variable SERVICE_AUTH_SECRET is missing")
+         :main_app_auth_secret,
+         System.get_env("MAIN_APP_AUTH_SECRET") ||
+           raise("environment variable MAIN_APP_AUTH_SECRET is missing")
+
+  config :zer0_stream,
+         :control_plane_auth_secret,
+         System.get_env("CONTROL_PLANE_AUTH_SECRET") ||
+           raise("environment variable CONTROL_PLANE_AUTH_SECRET is missing")
 
   lifecycle_webhook_url = System.get_env("LIFECYCLE_WEBHOOK_URL")
   lifecycle_webhook_secret = System.get_env("LIFECYCLE_WEBHOOK_SECRET")

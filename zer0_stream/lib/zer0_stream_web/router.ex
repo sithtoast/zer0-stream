@@ -14,8 +14,12 @@ defmodule Zer0StreamWeb.Router do
     plug :accepts, ["json"]
   end
 
-  pipeline :service_auth do
-    plug Zer0StreamWeb.Plugs.ServiceAuth
+  pipeline :main_app_auth do
+    plug Zer0StreamWeb.Plugs.ServiceAuth, role: :main
+  end
+
+  pipeline :worker_auth do
+    plug Zer0StreamWeb.Plugs.ServiceAuth, role: :worker
   end
 
   scope "/api", Zer0StreamWeb do
@@ -23,11 +27,16 @@ defmodule Zer0StreamWeb.Router do
 
     get "/health", StreamController, :health
     get "/streams", StreamController, :index
-    get "/streams/:id/playback", StreamController, :playback
+  end
+
+  scope "/api/streams", Zer0StreamWeb do
+    pipe_through [:api, :main_app_auth]
+
+    get "/:id/playback", StreamController, :playback
   end
 
   scope "/api/control", Zer0StreamWeb do
-    pipe_through [:api, :service_auth]
+    pipe_through [:api, :main_app_auth]
 
     post "/creators", StreamController, :create_creator
     post "/streams", StreamController, :create_persistent
@@ -35,7 +44,7 @@ defmodule Zer0StreamWeb.Router do
   end
 
   scope "/api/ingest", Zer0StreamWeb do
-    pipe_through [:api, :service_auth]
+    pipe_through [:api, :worker_auth]
 
     post "/rtmp/authorize", IngestController, :authorize
     post "/rtmp/:connection_id/stop", IngestController, :stop

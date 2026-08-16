@@ -5,11 +5,19 @@ defmodule Zer0StreamWeb.Plugs.ServiceAuth do
 
   def init(options), do: options
 
-  def call(conn, _options) do
+  def call(conn, options) do
     timestamp = get_req_header(conn, "x-zer0-timestamp") |> List.first()
     signature = get_req_header(conn, "x-zer0-signature") |> List.first()
+    role = Keyword.fetch!(options, :role)
 
-    if ServiceAuth.valid?(conn.method, conn.request_path, conn.body_params, timestamp, signature) do
+    if ServiceAuth.valid?(
+         role,
+         conn.method,
+         conn.request_path,
+         conn.body_params,
+         timestamp,
+         signature
+       ) do
       conn
     else
       conn

@@ -61,7 +61,8 @@ config :zer0_stream, Zer0StreamWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :zer0_stream, dev_routes: true
 
-config :zer0_stream, :service_auth_secret, "dev-service-auth-secret"
+config :zer0_stream, :main_app_auth_secret, "dev-main-app-auth-secret"
+config :zer0_stream, :control_plane_auth_secret, "dev-control-plane-auth-secret"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console, format: "[$level] $message\n"

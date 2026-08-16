@@ -12,7 +12,7 @@ defmodule Zer0StreamWeb.IngestControllerTest do
 
     conn =
       conn
-      |> service_conn(:post, "/api/ingest/rtmp/authorize", params)
+      |> service_conn(:worker, :post, "/api/ingest/rtmp/authorize", params)
       |> post("/api/ingest/rtmp/authorize", params)
 
     assert %{"session" => session, "stream" => response_stream} = json_response(conn, 201)
@@ -26,7 +26,7 @@ defmodule Zer0StreamWeb.IngestControllerTest do
 
     conn =
       conn
-      |> service_conn(:post, "/api/ingest/rtmp/authorize", params)
+      |> service_conn(:worker, :post, "/api/ingest/rtmp/authorize", params)
       |> post("/api/ingest/rtmp/authorize", params)
 
     assert json_response(conn, 401) == %{"error" => "invalid stream key"}
@@ -40,12 +40,14 @@ defmodule Zer0StreamWeb.IngestControllerTest do
     authorize_params = %{stream_key: token, connection_id: "http-connection-3"}
 
     conn
-    |> service_conn(:post, "/api/ingest/rtmp/authorize", authorize_params)
+    |> service_conn(:worker, :post, "/api/ingest/rtmp/authorize", authorize_params)
     |> post("/api/ingest/rtmp/authorize", authorize_params)
 
     conn =
       build_conn()
-      |> service_conn(:post, "/api/ingest/rtmp/http-connection-3/stop", %{request_id: "stop-3"})
+      |> service_conn(:worker, :post, "/api/ingest/rtmp/http-connection-3/stop", %{
+        request_id: "stop-3"
+      })
       |> post("/api/ingest/rtmp/http-connection-3/stop", %{request_id: "stop-3"})
 
     assert %{"session" => %{"status" => "ended"}} = json_response(conn, 200)

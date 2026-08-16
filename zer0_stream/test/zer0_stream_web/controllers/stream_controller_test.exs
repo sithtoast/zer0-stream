@@ -91,7 +91,11 @@ defmodule Zer0StreamWeb.StreamControllerTest do
     {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
     {:ok, session} = Zer0Stream.Ingest.authorize_rtmp(token, "playback-connection")
 
-    conn = get(conn, "/api/streams/#{stream.id}/playback")
+    conn =
+      conn
+      |> service_conn(:get, "/api/streams/#{stream.id}/playback", %{})
+      |> get("/api/streams/#{stream.id}/playback")
+
     assert %{"playback_url" => url, "session_id" => session_id} = json_response(conn, 200)
     assert session_id == session.id
     assert url =~ "/hls-boombox/stream-session-#{session.id}/master.m3u8?token="
@@ -101,7 +105,28 @@ defmodule Zer0StreamWeb.StreamControllerTest do
     {:ok, creator} = Streams.create_creator(%{external_id: "creator-offline"})
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Offline Test"})
 
-    conn = get(conn, "/api/streams/#{stream.id}/playback")
+    conn =
+      conn
+      |> service_conn(:get, "/api/streams/#{stream.id}/playback", %{})
+      |> get("/api/streams/#{stream.id}/playback")
+
     assert response(conn, 404) == ""
+  end
+
+  test "rejects playback token issuance without main-app authentication", %{conn: conn} do
+    conn = get(conn, "/api/streams/1/playback")
+
+    assert json_response(conn, 401) == %{"error" => "unauthorized"}
+  end
+
+  test "rejects worker authentication on a main-app route", %{conn: conn} do
+    params = %{external_id: "wrong-scope"}
+
+    conn =
+      conn
+      |> service_conn(:worker, :post, "/api/control/creators", params)
+      |> post("/api/control/creators", params)
+
+    assert json_response(conn, 401) == %{"error" => "unauthorized"}
   end
 end

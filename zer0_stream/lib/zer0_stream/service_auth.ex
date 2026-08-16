@@ -1,19 +1,19 @@
 defmodule Zer0Stream.ServiceAuth do
   @max_age_seconds 60
 
-  def sign(method, path, params, timestamp \\ System.system_time(:second)) do
+  def sign(role, method, path, params, timestamp \\ System.system_time(:second)) do
     signature =
-      :crypto.mac(:hmac, :sha256, secret(), signing_payload(method, path, params, timestamp))
+      :crypto.mac(:hmac, :sha256, secret(role), signing_payload(method, path, params, timestamp))
       |> Base.url_encode64(padding: false)
 
     {Integer.to_string(timestamp), signature}
   end
 
-  def valid?(method, path, params, timestamp, signature)
+  def valid?(role, method, path, params, timestamp, signature)
       when is_binary(timestamp) and is_binary(signature) do
     with {timestamp, ""} <- Integer.parse(timestamp),
          true <- abs(System.system_time(:second) - timestamp) <= @max_age_seconds,
-         {_timestamp, expected_signature} <- sign(method, path, params, timestamp),
+         {_timestamp, expected_signature} <- sign(role, method, path, params, timestamp),
          true <- secure_compare(signature, expected_signature) do
       true
     else
@@ -21,7 +21,7 @@ defmodule Zer0Stream.ServiceAuth do
     end
   end
 
-  def valid?(_method, _path, _params, _timestamp, _signature), do: false
+  def valid?(_role, _method, _path, _params, _timestamp, _signature), do: false
 
   defp signing_payload(method, path, params, timestamp) do
     [method |> to_string() |> String.upcase(), path, timestamp, canonical_json(params)]
@@ -50,7 +50,6 @@ defmodule Zer0Stream.ServiceAuth do
 
   defp secure_compare(_left, _right), do: false
 
-  defp secret do
-    Application.fetch_env!(:zer0_stream, :service_auth_secret)
-  end
+  defp secret(:main), do: Application.fetch_env!(:zer0_stream, :main_app_auth_secret)
+  defp secret(:worker), do: Application.fetch_env!(:zer0_stream, :control_plane_auth_secret)
 end
