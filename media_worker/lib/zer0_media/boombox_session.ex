@@ -36,7 +36,7 @@ defmodule Zer0Media.BoomboxSession do
              "Application.ensure_all_started(:boombox)"
            ],
            cd: runtime_dir,
-           env: [{"MIX_HOME", mix_home}, {"HEX_HOME", hex_home}],
+           env: [{"MIX_ENV", "prod"}, {"MIX_HOME", mix_home}, {"HEX_HOME", hex_home}],
            stderr_to_stdout: true
          ) do
       {_output, 0} ->
@@ -68,6 +68,7 @@ defmodule Zer0Media.BoomboxSession do
         {:cd, runtime_dir},
         {:env,
          [
+           {~c"MIX_ENV", ~c"prod"},
            {~c"MIX_HOME", String.to_charlist(Path.expand("../.mix-boombox", runtime_dir))},
            {~c"HEX_HOME", String.to_charlist(Path.expand("../.hex-boombox", runtime_dir))},
            {~c"BOOMBOX_INPUT_URL", String.to_charlist(input_url)},

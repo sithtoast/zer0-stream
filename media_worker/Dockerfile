@@ -26,7 +26,7 @@ COPY media_worker ./media_worker
 COPY boombox_runtime ./boombox_runtime
 
 RUN cd /app/media_worker && MIX_ENV=prod MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix compile
-RUN cd /app/boombox_runtime && MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix compile
+RUN cd /app/boombox_runtime && MIX_ENV=prod MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix compile
 
 FROM hexpm/elixir:1.20.2-erlang-29.0.4-debian-trixie-20260713-slim
 
