@@ -13,7 +13,10 @@ COPY media_worker/mix.exs media_worker/mix.lock ./media_worker/
 COPY boombox_runtime/mix.exs boombox_runtime/mix.lock ./boombox_runtime/
 
 RUN mix local.hex --force && mix local.rebar --force
-RUN cd /app/media_worker && mix deps.get
+RUN MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media \
+    mix local.hex --force && \
+    MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix local.rebar --force
+RUN cd /app/media_worker && MIX_ENV=prod MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix deps.get
 RUN MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox \
     mix local.hex --force && \
     MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix local.rebar --force
@@ -22,7 +25,7 @@ RUN cd /app/boombox_runtime && MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boo
 COPY media_worker ./media_worker
 COPY boombox_runtime ./boombox_runtime
 
-RUN cd /app/media_worker && mix compile
+RUN cd /app/media_worker && MIX_ENV=prod MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix compile
 RUN cd /app/boombox_runtime && MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix compile
 
 FROM hexpm/elixir:1.20.2-erlang-29.0.4-debian-trixie-20260713-slim
@@ -39,8 +42,8 @@ COPY --from=builder /app/media_worker /app/media_worker
 COPY --from=builder /app/boombox_runtime /app/boombox_runtime
 COPY --from=builder /app/.mix-boombox /app/.mix-boombox
 COPY --from=builder /app/.hex-boombox /app/.hex-boombox
-COPY --from=builder /root/.mix /app/.mix-media
-COPY --from=builder /root/.hex /app/.hex-media
+COPY --from=builder /app/.mix-media /app/.mix-media
+COPY --from=builder /app/.hex-media /app/.hex-media
 
 ENV MIX_ENV=prod \
     MIX_HOME=/app/.mix-media \

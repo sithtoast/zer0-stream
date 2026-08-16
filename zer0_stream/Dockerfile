@@ -22,6 +22,7 @@ COPY --from=builder /app/_build /app/_build
 COPY --from=builder /app/deps /app/deps
 COPY --from=builder /app/lib /app/lib
 COPY --from=builder /app/config /app/config
+COPY --from=builder /app/priv /app/priv
 COPY --from=builder /app/mix.exs /app/mix.exs
 COPY --from=builder /app/mix.lock /app/mix.lock
 COPY --from=builder /app/docker-entrypoint.sh /app/docker-entrypoint.sh
