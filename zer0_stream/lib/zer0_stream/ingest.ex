@@ -80,17 +80,40 @@ defmodule Zer0Stream.Ingest do
     now = DateTime.utc_now()
 
     Repo.transaction(fn ->
-      {ended_count, _} =
-        Repo.update_all(
-          from(session in StreamSession, where: session.status == "live"),
-          set: [status: "ended", ended_at: now, updated_at: now]
+      sessions =
+        Repo.all(
+          from(session in StreamSession,
+            where: session.status == "live",
+            order_by: [desc: session.started_at],
+            preload: [stream: :creator]
+          )
         )
 
-      Repo.update_all(from(stream in Stream, where: stream.status == "live"),
-        set: [status: "offline", updated_at: now]
-      )
+      streams = sessions |> Enum.uniq_by(& &1.stream_id)
 
-      ended_count
+      Enum.each(sessions, fn session ->
+        session
+        |> StreamSession.changeset(%{status: "ended", ended_at: now})
+        |> Repo.update!()
+      end)
+
+      Enum.each(streams, fn session ->
+        Repo.update_all(from(stream in Stream, where: stream.id == ^session.stream_id),
+          set: [status: "offline", updated_at: now]
+        )
+
+        ended_session = %{
+          session
+          | status: "ended",
+            ended_at: now,
+            stream: %{session.stream | status: "offline"}
+        }
+
+        :ok =
+          Zer0Stream.LifecycleWebhook.enqueue("stream.stopped", stream_event_data(ended_session))
+      end)
+
+      length(sessions)
     end)
   end
 

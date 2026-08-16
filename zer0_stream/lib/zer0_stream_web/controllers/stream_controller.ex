@@ -56,16 +56,29 @@ defmodule Zer0StreamWeb.StreamController do
            display_name: Map.get(params, "display_name")
          }) do
       {:ok, creator} -> json(conn, %{creator: creator_json(creator)})
+      {:ok, creator, :existing} -> json(conn, %{creator: creator_json(creator)})
       {:error, changeset} -> validation_error(conn, changeset)
     end
   end
 
-  def create_persistent(conn, %{"creator_id" => creator_id, "title" => title}) do
-    case Streams.create_stream(%{creator_id: creator_id, title: title}) do
-      {:ok, stream} ->
+  def create_persistent(conn, %{
+        "creator_id" => creator_id,
+        "title" => title,
+        "request_id" => request_id
+      }) do
+    case Streams.create_stream_once(%{creator_id: creator_id, title: title}, request_id) do
+      {:ok, {:created, stream}} ->
         conn
         |> put_status(:created)
         |> json(%{stream: stream_json(stream)})
+
+      {:ok, {:existing, stream}} ->
+        json(conn, %{stream: stream_json(stream)})
+
+      {:error, :missing_request_id} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "request_id is required"})
 
       {:error, changeset} ->
         validation_error(conn, changeset)
@@ -73,7 +86,7 @@ defmodule Zer0StreamWeb.StreamController do
   end
 
   def create_persistent(conn, _params),
-    do: json(conn, %{error: "creator_id and title are required"})
+    do: json(conn, %{error: "creator_id, title, and request_id are required"})
 
   def rotate_key(conn, %{"id" => id}) do
     case Streams.get_stream(id) do

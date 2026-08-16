@@ -23,3 +23,10 @@ Canonical JSON sorts object keys lexicographically at every nesting level, uses
 compact JSON, and preserves array order. For the playback `GET`, sign an empty
 JSON object: `{}`. The receiver returns `401` for expired, malformed, or
 wrong-scope signatures.
+
+## Idempotent Writes
+
+`POST /api/control/streams` requires a caller-generated `request_id` in its JSON
+body. Retrying with the same `request_id` returns the original stream with `200`;
+the first successful request returns `201`. Use a fresh, opaque request ID for
+each intended stream creation.

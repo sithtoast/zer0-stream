@@ -37,7 +37,7 @@ defmodule Zer0StreamWeb.StreamControllerTest do
   test "creates a persistent stream for a creator", %{conn: conn} do
     {:ok, creator} = Streams.create_creator(%{external_id: "creator-2"})
 
-    params = %{creator_id: creator.id, title: "Live Test"}
+    params = %{creator_id: creator.id, title: "Live Test", request_id: "create-stream-1"}
 
     conn =
       conn
@@ -48,6 +48,25 @@ defmodule Zer0StreamWeb.StreamControllerTest do
     assert stream["creator_id"] == creator.id
     assert stream["title"] == "Live Test"
     assert stream["status"] == "offline"
+  end
+
+  test "returns the original stream for an idempotent create retry", %{conn: conn} do
+    {:ok, creator} = Streams.create_creator(%{external_id: "creator-idempotent"})
+    params = %{creator_id: creator.id, title: "Live Test", request_id: "create-stream-retry"}
+
+    first_conn =
+      conn
+      |> service_conn(:post, "/api/control/streams", params)
+      |> post("/api/control/streams", params)
+
+    assert %{"stream" => %{"id" => stream_id}} = json_response(first_conn, 201)
+
+    second_conn =
+      build_conn()
+      |> service_conn(:post, "/api/control/streams", params)
+      |> post("/api/control/streams", params)
+
+    assert %{"stream" => %{"id" => ^stream_id}} = json_response(second_conn, 200)
   end
 
   test "rotates keys and revokes the previous key", %{conn: conn} do

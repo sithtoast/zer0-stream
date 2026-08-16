@@ -2,12 +2,27 @@ defmodule Zer0Stream.Streams do
   import Ecto.Query, only: [from: 2]
 
   alias Zer0Stream.Repo
+  alias Zer0Stream.{IdempotencyRecord, Repo}
   alias Zer0Stream.Streams.{Creator, Stream, StreamKey, StreamSession}
 
   def create_creator(attrs) do
-    %Creator{}
-    |> Creator.changeset(attrs)
-    |> Repo.insert()
+    case Map.get(attrs, :external_id) do
+      nil ->
+        %Creator{}
+        |> Creator.changeset(attrs)
+        |> Repo.insert()
+
+      external_id ->
+        case Repo.get_by(Creator, external_id: external_id) do
+          nil ->
+            %Creator{}
+            |> Creator.changeset(attrs)
+            |> Repo.insert()
+
+          creator ->
+            {:ok, creator, :existing}
+        end
+    end
   end
 
   def get_creator!(id), do: Repo.get!(Creator, id)
@@ -17,6 +32,48 @@ defmodule Zer0Stream.Streams do
     |> Stream.changeset(attrs)
     |> Repo.insert()
   end
+
+  def create_stream_once(attrs, request_id)
+      when is_binary(request_id) and byte_size(request_id) > 0 do
+    result =
+      Repo.transaction(fn ->
+        case Repo.get_by(IdempotencyRecord, operation: "create_stream", request_id: request_id) do
+          %IdempotencyRecord{resource_id: stream_id} ->
+            {:existing, Repo.get!(Stream, stream_id)}
+
+          nil ->
+            with {:ok, stream} <- create_stream(attrs),
+                 {:ok, _record} <-
+                   %IdempotencyRecord{}
+                   |> IdempotencyRecord.changeset(%{
+                     operation: "create_stream",
+                     request_id: request_id,
+                     resource_id: stream.id
+                   })
+                   |> Repo.insert() do
+              {:created, stream}
+            else
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
+        end
+      end)
+
+    case result do
+      {:error, changeset} ->
+        case Repo.get_by(IdempotencyRecord, operation: "create_stream", request_id: request_id) do
+          %IdempotencyRecord{resource_id: stream_id} ->
+            {:ok, {:existing, Repo.get!(Stream, stream_id)}}
+
+          nil ->
+            {:error, changeset}
+        end
+
+      result ->
+        result
+    end
+  end
+
+  def create_stream_once(_attrs, _request_id), do: {:error, :missing_request_id}
 
   def get_stream(id), do: Repo.get(Stream, id)
 
