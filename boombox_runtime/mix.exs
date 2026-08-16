@@ -16,6 +16,9 @@ defmodule Zer0Boombox.MixProject do
   end
 
   defp deps do
-    [{:boombox, "~> 0.2.13"}]
+    [
+      {:boombox, "~> 0.2.13"},
+      {:vix, "~> 0.40.0"}
+    ]
   end
 end
