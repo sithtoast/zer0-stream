@@ -42,6 +42,7 @@ defmodule Zer0Media.RTMPServer do
          %{
            client_ref: client_ref,
            connection_id: connection_id,
+           session_id: session_id,
            boombox_pid: boombox_pid,
            hls_output_dir: hls_output_dir
          }}

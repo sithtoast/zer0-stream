@@ -25,6 +25,10 @@ defmodule Zer0Media.ViewerTracker do
     GenServer.call(__MODULE__, :samples)
   end
 
+  def stop(stream_id) do
+    GenServer.call(__MODULE__, {:stop, to_string(stream_id)})
+  end
+
   @impl true
   def init(_state) do
     schedule_prune()
@@ -34,6 +38,22 @@ defmodule Zer0Media.ViewerTracker do
   @impl true
   def handle_call(:reset, _from, _state) do
     {:reply, :ok, %{viewers: %{}, updated_at: %{}, snapshots: %{}}}
+  end
+
+  @impl true
+  def handle_call({:stop, stream_id}, _from, state) do
+    viewers =
+      Map.reject(state.viewers, fn {{viewer_stream_id, _viewer_id}, _expires_at} ->
+        viewer_stream_id == stream_id
+      end)
+
+    {:reply, :ok,
+     %{
+       state
+       | viewers: viewers,
+         updated_at: Map.delete(state.updated_at, stream_id),
+         snapshots: Map.delete(state.snapshots, stream_id)
+     }}
   end
 
   @impl true

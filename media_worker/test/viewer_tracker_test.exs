@@ -83,4 +83,16 @@ defmodule Zer0Media.ViewerTrackerTest do
     assert snapshot.viewer_count == 3
     assert snapshot.average_viewer_count_15m >= 1.0
   end
+
+  test "removes an ended stream from future samples" do
+    ViewerTracker.heartbeat(42, "viewer-a")
+    ViewerTracker.heartbeat(43, "viewer-b")
+
+    assert {"42", 1} in ViewerTracker.samples()
+    assert {"43", 1} in ViewerTracker.samples()
+
+    assert ViewerTracker.stop(42) == :ok
+    refute Enum.any?(ViewerTracker.samples(), fn {stream_id, _count} -> stream_id == "42" end)
+    assert {"43", 1} in ViewerTracker.samples()
+  end
 end

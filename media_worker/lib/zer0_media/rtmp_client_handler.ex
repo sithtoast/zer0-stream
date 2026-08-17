@@ -13,6 +13,7 @@ defmodule Zer0Media.RTMPClientHandler do
       source_pid: nil,
       buffered: [],
       connection_id: opts.connection_id,
+      session_id: opts.session_id,
       boombox_pid: opts[:boombox_pid],
       hls_output_dir: opts[:hls_output_dir]
     }
@@ -53,6 +54,7 @@ defmodule Zer0Media.RTMPClientHandler do
 
   defp stop_session(state) do
     _ = ControlPlane.stop(state.connection_id)
+    Zer0Media.ViewerTracker.stop(state.session_id)
 
     if state.boombox_pid do
       Zer0Media.BoomboxSessionSupervisor.stop_session(state.boombox_pid)
