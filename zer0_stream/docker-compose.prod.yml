@@ -26,6 +26,27 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  chat:
+    image: sithtoast/zer0-stream-chat:latest
+    ports:
+      - "${CHAT_PORT:-4100}:4100"
+    environment:
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      DATABASE_URL: ${CHAT_DATABASE_URL:?CHAT_DATABASE_URL is required}
+      SECRET_KEY_BASE: ${CHAT_SECRET_KEY_BASE:?CHAT_SECRET_KEY_BASE is required}
+      PHX_HOST: ${CHAT_PHX_HOST:?CHAT_PHX_HOST is required}
+      CHAT_TOKEN_SECRET: ${CHAT_TOKEN_SECRET:?CHAT_TOKEN_SECRET is required}
+      PORT: 4100
+      AUTO_MIGRATE: ${CHAT_AUTO_MIGRATE:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "elixir -e 'Application.ensure_all_started(:inets); case :httpc.request(~c\"http://127.0.0.1:4100/health\") do {:ok, {{_, 200, _}, _, _}} -> System.halt(0); _ -> System.halt(1) end'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
   media_worker:
     image: sithtoast/zer0-stream-media:latest
     ports:

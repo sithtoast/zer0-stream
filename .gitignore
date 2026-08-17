@@ -1,3 +1,5 @@
+.mix-chat/
+.hex-chat/
 # Elixir and Mix build artifacts
 **/_build/
 **/cover/

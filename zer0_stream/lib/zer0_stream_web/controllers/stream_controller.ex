@@ -108,8 +108,15 @@ defmodule Zer0StreamWeb.StreamController do
         "creator_id" => creator_id,
         "title" => title,
         "request_id" => request_id
-      }) do
-    case Streams.create_stream_once(%{creator_id: creator_id, title: title}, request_id) do
+      } = params) do
+    attrs = %{
+      creator_id: creator_id,
+      title: title,
+      category_name: Map.get(params, "category_name"),
+      category_twitch_id: Map.get(params, "category_twitch_id")
+    }
+
+    case Streams.create_stream_once(attrs, request_id) do
       {:ok, {:created, stream}} ->
         conn
         |> put_status(:created)
@@ -131,20 +138,20 @@ defmodule Zer0StreamWeb.StreamController do
   def create_persistent(conn, _params),
     do: json(conn, %{error: "creator_id, title, and request_id are required"})
 
-  def update_stream(conn, %{"id" => id, "title" => title}) do
+  def update_stream(conn, %{"id" => id} = params) do
     case Streams.get_stream(id) do
       nil ->
         send_resp(conn, :not_found, "")
 
       stream ->
-        case Streams.update_stream(stream, %{title: title}) do
+        case Streams.update_stream(stream, Map.take(params, ["title", "category_name", "category_twitch_id"])) do
           {:ok, stream} -> json(conn, %{stream: stream_json(stream)})
           {:error, changeset} -> validation_error(conn, changeset)
         end
     end
   end
 
-  def update_stream(conn, _params), do: json(conn, %{error: "title is required"})
+  def update_stream(conn, _params), do: json(conn, %{error: "title or category is required"})
 
   def rotate_creator_key(conn, %{"id" => id}) do
     case Streams.get_creator(id) do
@@ -171,7 +178,14 @@ defmodule Zer0StreamWeb.StreamController do
     do: %{id: creator.id, external_id: creator.external_id, display_name: creator.display_name}
 
   defp stream_json(stream) do
-    %{id: stream.id, creator_id: stream.creator_id, title: stream.title, status: stream.status}
+    %{
+      id: stream.id,
+      creator_id: stream.creator_id,
+      title: stream.title,
+      category_name: stream.category_name,
+      category_twitch_id: stream.category_twitch_id,
+      status: stream.status
+    }
   end
 
   defp key_json(key, token), do: %{id: key.id, creator_id: key.creator_id, token: token}

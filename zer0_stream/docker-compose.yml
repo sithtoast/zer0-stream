@@ -19,6 +19,24 @@ services:
       MEDIA_WORKER_URL: http://media_worker:8080
     restart: unless-stopped
 
+  chat:
+    build:
+      context: ..
+      dockerfile: chat/Dockerfile
+    image: sithtoast/zer0-stream-chat:latest
+    container_name: zer0-stream-chat
+    ports:
+      - "4100:4100"
+    environment:
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      PHX_HOST: localhost
+      PORT: 4100
+      SECRET_KEY_BASE: changeme-chat
+      DATABASE_URL: ${CHAT_DATABASE_URL:?CHAT_DATABASE_URL is required}
+      CHAT_TOKEN_SECRET: ${CHAT_TOKEN_SECRET:-dev-chat-token-secret}
+    restart: unless-stopped
+
   media_worker:
     build:
       context: ..

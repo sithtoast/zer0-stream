@@ -4,6 +4,8 @@ defmodule Zer0Stream.Streams.Stream do
 
   schema "streams" do
     field(:title, :string)
+    field(:category_name, :string)
+    field(:category_twitch_id, :string)
     field(:status, :string, default: "offline")
 
     belongs_to(:creator, Zer0Stream.Streams.Creator)
@@ -12,8 +14,9 @@ defmodule Zer0Stream.Streams.Stream do
 
   def changeset(stream, attrs) do
     stream
-    |> cast(attrs, [:title, :status, :creator_id])
+    |> cast(attrs, [:title, :category_name, :category_twitch_id, :status, :creator_id])
     |> validate_required([:title, :creator_id])
+    |> validate_length(:category_name, max: 100)
     |> validate_inclusion(:status, ~w(offline live))
     |> unique_constraint(:creator_id)
     |> foreign_key_constraint(:creator_id)
