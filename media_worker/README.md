@@ -109,6 +109,12 @@ remove the stream-session directory. Set `HLS_CLEANUP_GRACE_MS` to change that
 viewer grace period. On worker startup, stale `stream-session-*` directories
 are removed; local HLS storage is therefore not an archive or recording store.
 
+Some RTMP publishers send `FCUnpublish` without the `deleteStream` command.
+The worker treats a subsequent lack of media as the stream end and stops the
+session after 15 seconds by default. Set `RTMP_IDLE_TIMEOUT_MS` to tune this
+fallback; it triggers the same viewer and HLS cleanup path as a normal RTMP
+disconnect.
+
 The local pipeline uses non-strict synchronization rather than
 strict `:vod`. Measured audio drift is not a fixed clock-rate ratio: it comes
 from OBS's separate, unsynchronized audio/video capture threads, so it varies
