@@ -40,6 +40,36 @@ defmodule Zer0StreamWeb.IngestController do
     json(conn, %{ended_sessions: ended_count})
   end
 
+  def viewer_sample(conn, %{"session_id" => session_id, "viewer_count" => viewer_count}) do
+    case Zer0Stream.Viewers.record_sample(session_id, viewer_count) do
+      {:ok, sample} ->
+        conn
+        |> put_status(:created)
+        |> json(%{viewer_sample: viewer_sample_json(sample)})
+
+      {:error, :not_found} ->
+        send_resp(conn, :not_found, "")
+
+      {:error, :invalid_viewer_count} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{error: "viewer_count must be a non-negative integer"})
+
+      {:error, changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{
+          errors: Ecto.Changeset.traverse_errors(changeset, fn {message, _opts} -> message end)
+        })
+    end
+  end
+
+  def viewer_sample(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "viewer_count is required"})
+  end
+
   defp session_json(session) do
     %{
       id: session.id,
@@ -52,5 +82,15 @@ defmodule Zer0StreamWeb.IngestController do
 
   defp stream_json(stream) do
     %{id: stream.id, creator_id: stream.creator_id, title: stream.title, status: stream.status}
+  end
+
+  defp viewer_sample_json(sample) do
+    %{
+      id: sample.id,
+      stream_id: sample.stream_id,
+      stream_session_id: sample.stream_session_id,
+      viewer_count: sample.viewer_count,
+      sampled_at: sample.sampled_at
+    }
   end
 end

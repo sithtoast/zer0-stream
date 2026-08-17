@@ -13,7 +13,8 @@ defmodule Zer0Media.RTMPClientHandler do
       source_pid: nil,
       buffered: [],
       connection_id: opts.connection_id,
-      boombox_pid: opts[:boombox_pid]
+      boombox_pid: opts[:boombox_pid],
+      hls_output_dir: opts[:hls_output_dir]
     }
   end
 
@@ -55,6 +56,10 @@ defmodule Zer0Media.RTMPClientHandler do
 
     if state.boombox_pid do
       Zer0Media.BoomboxSessionSupervisor.stop_session(state.boombox_pid)
+    end
+
+    if state.hls_output_dir do
+      Zer0Media.HLSCleanup.schedule(state.hls_output_dir)
     end
   end
 

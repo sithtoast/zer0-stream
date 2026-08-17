@@ -9,6 +9,9 @@ defmodule Zer0Media.Application do
   def start(_type, _args) do
     children = [
       Zer0Media.BoomboxSessionSupervisor,
+      Zer0Media.HLSCleanup,
+      Zer0Media.ViewerTracker,
+      Zer0Media.ViewerMetricsReporter,
       {Bandit, plug: Zer0Media.HLSRouter, port: http_port(), scheme: :http}
     ]
 

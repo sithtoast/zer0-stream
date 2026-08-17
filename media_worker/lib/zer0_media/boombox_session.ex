@@ -30,13 +30,11 @@ defmodule Zer0Media.BoomboxSession do
            executable,
            [
              "run",
-             "--no-compile",
-             "--no-deps-check",
              "-e",
              "Application.ensure_all_started(:boombox)"
            ],
            cd: runtime_dir,
-           env: [{"MIX_ENV", "prod"}, {"MIX_HOME", mix_home}, {"HEX_HOME", hex_home}],
+           env: [{"MIX_ENV", boombox_mix_env()}, {"MIX_HOME", mix_home}, {"HEX_HOME", hex_home}],
            stderr_to_stdout: true
          ) do
       {_output, 0} ->
@@ -68,7 +66,7 @@ defmodule Zer0Media.BoomboxSession do
         {:cd, runtime_dir},
         {:env,
          [
-           {~c"MIX_ENV", ~c"prod"},
+           {~c"MIX_ENV", String.to_charlist(boombox_mix_env())},
            {~c"MIX_HOME", String.to_charlist(Path.expand("../.mix-boombox", runtime_dir))},
            {~c"HEX_HOME", String.to_charlist(Path.expand("../.hex-boombox", runtime_dir))},
            {~c"BOOMBOX_INPUT_URL", String.to_charlist(input_url)},
@@ -99,7 +97,7 @@ defmodule Zer0Media.BoomboxSession do
   @impl true
   def terminate(_reason, %{port: port, output: output}) do
     if Port.info(port), do: Port.close(port)
-    File.rm_rf(Path.dirname(output))
+    Zer0Media.HLSCleanup.schedule(Path.dirname(output))
     :ok
   end
 
@@ -111,11 +109,15 @@ defmodule Zer0Media.BoomboxSession do
   end
 
   defp boombox_hls_dir do
-    Path.join(File.cwd!(), "priv/hls-boombox")
+    Application.get_env(:zer0_media, :boombox_hls_dir, Path.join(File.cwd!(), "priv/hls-boombox"))
   end
 
   defp boombox_runtime_dir do
     Path.expand("../boombox_runtime", File.cwd!())
+  end
+
+  defp boombox_mix_env do
+    System.get_env("BOOMBOX_MIX_ENV", System.get_env("MIX_ENV", "dev"))
   end
 
   defp await_listener!(port, attempts \\ 300)

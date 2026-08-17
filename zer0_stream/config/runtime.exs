@@ -64,6 +64,10 @@ if config_env() == :prod do
          System.get_env("CONTROL_PLANE_AUTH_SECRET") ||
            raise("environment variable CONTROL_PLANE_AUTH_SECRET is missing")
 
+  config :zer0_stream,
+         :media_worker_url,
+         System.get_env("MEDIA_WORKER_URL", "http://media_worker:8080")
+
   lifecycle_webhook_url = System.get_env("LIFECYCLE_WEBHOOK_URL")
   lifecycle_webhook_secret = System.get_env("LIFECYCLE_WEBHOOK_SECRET")
 

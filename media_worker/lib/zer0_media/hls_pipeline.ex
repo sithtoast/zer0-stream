@@ -9,6 +9,7 @@ defmodule Zer0Media.HLSPipeline do
     storage = HLS.Storage.File.new(base_dir: output_dir)
     segment_duration = configured_duration(:hls_segment_duration, Membrane.Time.seconds(30))
     safety_delay = configured_duration(:hls_safety_delay, segment_duration)
+    max_segments = configured_integer(:hls_max_segments, 30)
     audio_rate = configured_rate(:aac_timestamp_rate, 1.0)
 
     # The muxer only cuts a segment at the next keyframe AFTER segment_duration is
@@ -59,7 +60,7 @@ defmodule Zer0Media.HLSPipeline do
       child(:hls, %Membrane.HLS.SinkBin{
         storage: storage,
         manifest_uri: URI.parse("master.m3u8"),
-        playlist_mode: {:event, safety_delay},
+        playlist_mode: {:sliding, max_segments, safety_delay},
         target_segment_duration: target_segment_duration,
         trim_align?: true
       })
@@ -106,6 +107,24 @@ defmodule Zer0Media.HLSPipeline do
           {parsed, _rest} -> parsed
           :error -> default
         end
+    end
+  end
+
+  defp configured_integer(key, default) do
+    value =
+      Application.get_env(:zer0_media, key) ||
+        System.get_env(key |> Atom.to_string() |> String.upcase())
+
+    case value do
+      value when is_integer(value) and value > 0 -> value
+      value when is_binary(value) ->
+        case Integer.parse(value) do
+          {parsed, ""} when parsed > 0 -> parsed
+          _other -> default
+        end
+
+      _other ->
+        default
     end
   end
 end

@@ -14,6 +14,12 @@ defmodule Zer0Media.ControlPlane do
     request(:post, "/api/ingest/rtmp/reconcile", %{})
   end
 
+  def record_viewer_sample(session_id, viewer_count) do
+    request(:post, "/api/ingest/sessions/#{session_id}/viewer-samples", %{
+      viewer_count: viewer_count
+    })
+  end
+
   defp request(method, path, payload) do
     url = Application.get_env(:zer0_media, :control_plane_url, "http://localhost:4000") <> path
     {timestamp, signature} = Zer0Media.ControlPlaneAuth.sign(method, path, payload)
@@ -26,7 +32,7 @@ defmodule Zer0Media.ControlPlane do
            receive_timeout: 5_000
          ) do
       {:ok, %{status: 201, body: %{"session" => session}}} -> {:ok, session}
-      {:ok, %{status: 200}} -> :ok
+      {:ok, %{status: status}} when status in [200, 201] -> :ok
       {:ok, %{status: 401}} -> {:error, :unauthorized}
       {:ok, %{status: status}} -> {:error, {:control_plane, status}}
       {:error, reason} -> {:error, {:control_plane, reason}}

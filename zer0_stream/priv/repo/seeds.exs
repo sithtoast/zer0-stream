@@ -16,7 +16,7 @@ stream =
       {:error, changeset} -> raise "could not create local stream: #{inspect(changeset.errors)}"
     end
 
-{:ok, %{token: token}} = Streams.rotate_stream_key(stream)
+{:ok, %{token: token}} = Streams.rotate_creator_stream_key(creator)
 
 IO.puts("Created local stream #{stream.id}")
 IO.puts("Ingest key: #{token}")

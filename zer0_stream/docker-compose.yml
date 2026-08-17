@@ -16,6 +16,7 @@ services:
       PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:-dev-playback-secret}
       MAIN_APP_AUTH_SECRET: ${MAIN_APP_AUTH_SECRET:-dev-main-app-auth-secret}
       CONTROL_PLANE_AUTH_SECRET: ${CONTROL_PLANE_AUTH_SECRET:-dev-control-plane-auth-secret}
+      MEDIA_WORKER_URL: http://media_worker:8080
     restart: unless-stopped
 
   media_worker:
@@ -31,6 +32,7 @@ services:
       MIX_ENV: prod
       CONTROL_PLANE_URL: http://app:4000
       CONTROL_PLANE_AUTH_SECRET: ${CONTROL_PLANE_AUTH_SECRET:-dev-control-plane-auth-secret}
+      VIEWER_TTL_SECONDS: ${VIEWER_TTL_SECONDS:-30}
       HLS_ALLOWED_ORIGINS: ${HLS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:4000}
       PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:-dev-playback-secret}
     depends_on:

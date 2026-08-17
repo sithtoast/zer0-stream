@@ -26,8 +26,21 @@ The seed script uses `Zer0Stream.Streams`, which is not part of this Mix app.
 Then start this worker in a second terminal:
 
 ```sh
-mix run -e '{:ok, _pid} = Zer0Media.RTMPServer.start_link(port: 1935); Process.sleep(:infinity)'
+mix zer0_media.dev
 ```
+
+When the control plane uses a non-default local port, pass it explicitly:
+
+```sh
+mix zer0_media.dev --control-plane-url http://localhost:4001
+```
+
+This starts the HTTP server on port `8080` and the RTMP listener on port `1935`.
+It uses `dev` for both Mix applications by default. The first run prepares the
+sibling Boombox runtime automatically; no production compilation is required.
+It also uses the local control-plane secret already configured by
+`zer0_stream/config/dev.exs`; production still requires
+`CONTROL_PLANE_AUTH_SECRET`.
 
 Publish to:
 
@@ -85,7 +98,18 @@ duration, e.g. `HLS_SEGMENT_DURATION=4000000000`, and GOPs can no longer drift
 past the target. This also moves the pipeline toward the low-latency target
 segment size instead of the 8-30s workaround durations.
 
-The local pipeline uses `{:event, safety_delay}` synchronization rather than
+The legacy direct pipeline uses a sliding playlist (`{:sliding, max_segments,
+safety_delay}`) with `HLS_MAX_SEGMENTS=30` by default. It keeps a bounded
+window of recent segments instead of accumulating a full stream on local disk.
+The default Boombox path is also cleaned after each session, but its pinned
+packager does not yet expose a segment-window setting.
+
+Both worker paths keep completed HLS artifacts for 60 seconds by default, then
+remove the stream-session directory. Set `HLS_CLEANUP_GRACE_MS` to change that
+viewer grace period. On worker startup, stale `stream-session-*` directories
+are removed; local HLS storage is therefore not an archive or recording store.
+
+The local pipeline uses non-strict synchronization rather than
 strict `:vod`. Measured audio drift is not a fixed clock-rate ratio: it comes
 from OBS's separate, unsynchronized audio/video capture threads, so it varies
 session to session and can't be fully cancelled by a single static
@@ -96,8 +120,6 @@ timing-contract docs). `AAC_TIMESTAMP_RATE` is still worth tuning to reduce
 how often that happens, but it's no longer a hard requirement for the stream
 to stay up. `safety_delay` defaults to the configured `HLS_SEGMENT_DURATION`
 and can be overridden separately with `HLS_SAFETY_DELAY` (nanoseconds).
-Sliding LL-HLS (`{:sliding, max_segments, safety_delay}`) is the next tuning
-step once event-mode playback is verified stable.
 
 While the publisher is live, inspect the manifest and segments in that
 directory. A non-empty manifest with advancing segments is the first playback
@@ -127,6 +149,55 @@ or completed stream session.
 Set `CONTROL_PLANE_URL` through application configuration when the control
 plane is not running at `http://localhost:4000`.
 
+## Concurrent Viewer Counts
+
+The worker reports **concurrent HLS playback clients**, not unique users. A
+valid playlist, init-segment, or media-segment request for
+`stream-session-<id>` renews that client's heartbeat. The default heartbeat TTL
+is 30 seconds (`VIEWER_TTL_SECONDS`); a client disappears from the count after
+it stops requesting HLS media for that interval. The live count is in-memory,
+approximate, and can lag a disconnect by up to the TTL.
+
+The worker identifies a playback client with its `zer0_viewer_id` first-party
+cookie. Custom clients can instead send a stable, opaque `viewer_id` query
+parameter (1-128 bytes) on every playlist and segment request. `hls.js` can
+reliably use either cookies with `withCredentials` or a custom loader that adds
+the query parameter to every request. Safari/native HLS does not provide a
+JavaScript hook for per-segment headers or query parameters; it therefore uses
+the cookie when available. If that cookie is blocked as third-party storage,
+Safari requests cannot be reliably attributed to one playback client and the
+count may overcount.
+
+`GET /api/sessions/:id/viewers` is an internal control-plane route. It returns
+the current snapshot for the session ID encoded in the HLS path:
+
+```json
+{
+	"session_id": 42,
+	"viewer_count": 3,
+	"updated_at": "2026-08-16T12:00:00Z"
+}
+```
+
+It requires the existing `CONTROL_PLANE_AUTH_SECRET`, shared only by the worker
+and control plane. The control plane signs
+`GET\n/api/sessions/:id/viewers\n<unix timestamp>\n{}` using the same 60-second
+HMAC-SHA256 scheme as its worker ingest requests. The endpoint returns `401` for
+missing, expired, or invalid signatures. It never returns stream keys, playback
+tokens, or viewer IDs.
+
+zer0.tv must call `GET /api/streams/:id/viewers` on the control plane instead.
+That main-app-authenticated endpoint resolves the live session and reads the
+worker internally, so no extra viewer-count secret is required.
+
+Every `VIEWER_SNAPSHOT_INTERVAL_MS` (30 seconds by default), the worker sends
+the raw concurrent count for each recently active stream session to the control
+plane. The control plane stores append-only samples in PostgreSQL with its own
+timestamp; no viewer IDs, stream keys, or playback tokens are persisted. This
+makes the historical series survive worker restarts. The main app can retrieve
+up to 1,000 durable samples and their arithmetic mean through its normal
+service authentication at `GET /api/streams/:id/viewer-metrics?limit=100`.
+
 ## Temporary Boombox packaging probe
 
 The worker uses the supervised Boombox path by default. Each authorized session
@@ -134,22 +205,15 @@ gets its own local RTMP listener and Boombox process. To temporarily roll back
 to the legacy direct HLS path, set `LEGACY_HLS_MODE=true`.
 
 Boombox lives in the sibling `boombox_runtime/` Mix app because its dependency
-graph is incompatible with the media worker's control-plane dependencies. Build
-it once before starting the worker (and during deployment):
-
-```sh
-cd ../boombox_runtime
-MIX_HOME=../.mix-boombox HEX_HOME=../.hex-boombox mix deps.get
-MIX_HOME=../.mix-boombox HEX_HOME=../.hex-boombox mix compile
-```
-
-The worker starts `boombox_runtime` automatically for each live session; no
-standalone probe process or Docker RTMP relay is required.
+graph is incompatible with the media worker's control-plane dependencies. The
+worker prepares it automatically in the active Mix environment before listening
+for RTMP, then starts it for each live session. No standalone probe process or
+manual local compilation is required.
 
 Start the worker in Boombox mode:
 
 ```sh
-mix run -e '{:ok, _pid} = Zer0Media.RTMPServer.start_link(port: 1935); Process.sleep(:infinity)'
+mix zer0_media.dev
 ```
 
 OBS still publishes to `rtmp://localhost:1935/live/<stream-key>`. The worker

@@ -9,7 +9,7 @@ defmodule Zer0Stream.Ingest.RTMPAdapterTest do
 
     {:ok, creator} = Streams.create_creator(%{external_id: "adapter-creator"})
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Adapter Test"})
-    {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
+    {:ok, %{token: token}} = Streams.rotate_creator_stream_key(creator)
 
     {:ok, stream: stream, token: token}
   end

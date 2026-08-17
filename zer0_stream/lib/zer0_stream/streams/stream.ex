@@ -7,7 +7,6 @@ defmodule Zer0Stream.Streams.Stream do
     field(:status, :string, default: "offline")
 
     belongs_to(:creator, Zer0Stream.Streams.Creator)
-    has_many(:stream_keys, Zer0Stream.Streams.StreamKey)
     timestamps(type: :utc_datetime)
   end
 
@@ -16,6 +15,7 @@ defmodule Zer0Stream.Streams.Stream do
     |> cast(attrs, [:title, :status, :creator_id])
     |> validate_required([:title, :creator_id])
     |> validate_inclusion(:status, ~w(offline live))
+    |> unique_constraint(:creator_id)
     |> foreign_key_constraint(:creator_id)
   end
 end

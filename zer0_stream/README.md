@@ -23,12 +23,25 @@ The API is available at `http://localhost:4000`.
 
 - `POST /api/control/creators` creates a streaming creator.
 - `POST /api/control/streams` creates a stream for a creator.
-- `POST /api/control/streams/:id/keys` rotates an ingest key. The raw key is
-  returned only in this response and only its SHA-256 hash is stored.
+- `POST /api/control/creators/:id/keys` rotates a creator's ingest key. The raw
+  key is returned only in this response and only its SHA-256 hash is stored.
 - `POST /api/ingest/rtmp/authorize` validates an RTMP stream key and opens a
   live stream session.
 - `POST /api/ingest/rtmp/:connection_id/stop` closes an RTMP stream session.
+- `GET /api/streams/:id/viewers` returns the current concurrent viewer count.
+- `GET /api/streams/:id/viewer-metrics?limit=100` returns durable viewer
+  samples and their arithmetic mean. `limit` defaults to 100 and is capped at
+  1,000.
 - `GET /api/health` checks service health.
+
+The two viewer endpoints use the same main-app authentication as playback. An
+unknown stream returns `404`. An offline stream returns `200` with
+`{"stream_id": id, "viewer_count": 0, "live": false}` from the live endpoint,
+and an empty sample list with an average of `0.0` from the historical endpoint.
+Timestamps are UTC ISO-8601 values.
+
+Each creator has one channel record. Its ingest key belongs to the creator, so
+the RTMP publish URL stays stable when channel metadata changes.
 
 The RTMP adapter in `Zer0Stream.Ingest.RTMPAdapter` is the boundary for the
 future network listener and Membrane pipeline. It owns authorization and

@@ -34,14 +34,17 @@ defmodule Zer0StreamWeb.Router do
     pipe_through [:api, :main_app_auth]
 
     get "/:id/playback", StreamController, :playback
+    get "/:id/viewers", StreamController, :viewers
+    get "/:id/viewer-metrics", StreamController, :viewer_metrics
   end
 
   scope "/api/control", Zer0StreamWeb do
     pipe_through [:api, :main_app_auth]
 
     post "/creators", StreamController, :create_creator
+    post "/creators/:id/keys", StreamController, :rotate_creator_key
     post "/streams", StreamController, :create_persistent
-    post "/streams/:id/keys", StreamController, :rotate_key
+    patch "/streams/:id", StreamController, :update_stream
   end
 
   scope "/api/ingest", Zer0StreamWeb do
@@ -50,6 +53,7 @@ defmodule Zer0StreamWeb.Router do
     post "/rtmp/authorize", IngestController, :authorize
     post "/rtmp/:connection_id/stop", IngestController, :stop
     post "/rtmp/reconcile", IngestController, :reconcile
+    post "/sessions/:session_id/viewer-samples", IngestController, :viewer_sample
   end
 
   # Enable LiveDashboard in development

@@ -18,7 +18,10 @@ config :zer0_stream, Zer0Stream.Repo,
 config :zer0_stream, Zer0StreamWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}, port: 4000],
+  http: [
+  ip: {127, 0, 0, 1},
+  port: String.to_integer(System.get_env("PORT", "4000"))
+],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
@@ -63,6 +66,13 @@ config :zer0_stream, dev_routes: true
 
 config :zer0_stream, :main_app_auth_secret, "dev-main-app-auth-secret"
 config :zer0_stream, :control_plane_auth_secret, "dev-control-plane-auth-secret"
+config :zer0_stream, :media_worker_url, System.get_env("MEDIA_WORKER_URL", "http://localhost:8080")
+
+ config :zer0_stream, :lifecycle_webhook_url,
+  "http://localhost:4000/webhooks/zer0-stream"
+
+ config :zer0_stream, :lifecycle_webhook_secret,
+  "dev-lifecycle-webhook-secret"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console, format: "[$level] $message\n"

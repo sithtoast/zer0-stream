@@ -5,8 +5,8 @@ defmodule Zer0StreamWeb.IngestControllerTest do
 
   test "authorizes an RTMP connection with a valid stream key", %{conn: conn} do
     {:ok, creator} = Streams.create_creator(%{external_id: "http-creator"})
-    {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "HTTP Ingest"})
-    {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
+    {:ok, _stream} = Streams.create_stream(%{creator_id: creator.id, title: "HTTP Ingest"})
+    {:ok, %{token: token}} = Streams.rotate_creator_stream_key(creator)
 
     params = %{stream_key: token, connection_id: "http-connection-1"}
 
@@ -34,8 +34,8 @@ defmodule Zer0StreamWeb.IngestControllerTest do
 
   test "stops an RTMP connection", %{conn: conn} do
     {:ok, creator} = Streams.create_creator(%{external_id: "http-stop-creator"})
-    {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "HTTP Stop"})
-    {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
+    {:ok, _stream} = Streams.create_stream(%{creator_id: creator.id, title: "HTTP Stop"})
+    {:ok, %{token: token}} = Streams.rotate_creator_stream_key(creator)
 
     authorize_params = %{stream_key: token, connection_id: "http-connection-3"}
 

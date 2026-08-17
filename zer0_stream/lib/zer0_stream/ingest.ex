@@ -11,16 +11,15 @@ defmodule Zer0Stream.Ingest do
       nil ->
         {:error, :unauthorized}
 
-      %{stream: %Stream{} = stream, id: stream_key_id} ->
-        case start_session(stream, stream_key_id, connection_id) do
-          {:ok, {session, :started}} ->
-            {:ok, session}
-
-          {:ok, session, :existing} ->
-            {:ok, session}
-
-          error ->
-            error
+      %{creator_id: creator_id, id: stream_key_id} ->
+        with %Stream{} = stream <- Streams.get_stream_for_creator(creator_id) do
+          case start_session(stream, stream_key_id, connection_id) do
+            {:ok, {session, :started}} -> {:ok, session}
+            {:ok, session, :existing} -> {:ok, session}
+            error -> error
+          end
+        else
+          nil -> {:error, :unauthorized}
         end
     end
   end

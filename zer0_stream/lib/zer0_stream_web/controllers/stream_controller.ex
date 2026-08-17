@@ -1,7 +1,7 @@
 defmodule Zer0StreamWeb.StreamController do
   use Zer0StreamWeb, :controller
 
-  alias Zer0Stream.Streams
+  alias Zer0Stream.{Streams, Viewers}
 
   def health(conn, _params) do
     json(conn, %{
@@ -50,6 +50,49 @@ defmodule Zer0StreamWeb.StreamController do
     end
   end
 
+  def viewers(conn, %{"id" => id}) do
+    case Streams.get_stream(id) do
+      nil ->
+        send_resp(conn, :not_found, "")
+
+      stream ->
+        case Streams.get_live_session(stream.id) do
+          nil ->
+            json(conn, %{stream_id: stream.id, viewer_count: 0, live: false})
+
+          session ->
+            case Zer0Stream.MediaWorker.viewer_snapshot(session.id) do
+              {:ok, snapshot} ->
+                json(conn, Map.merge(snapshot, %{stream_id: stream.id, live: true}))
+
+              {:error, _reason} ->
+                conn
+                |> put_status(:service_unavailable)
+                |> json(%{error: "viewer count unavailable"})
+            end
+        end
+    end
+  end
+
+  def viewer_metrics(conn, %{"id" => id} = params) do
+    limit = params |> Map.get("limit", "100") |> parse_limit()
+
+    case Streams.get_stream(id) do
+      nil ->
+        send_resp(conn, :not_found, "")
+
+      stream ->
+        %{samples: samples, average_viewer_count: average_viewer_count} =
+          Viewers.historical_series(stream.id, limit)
+
+        json(conn, %{
+          stream_id: stream.id,
+          average_viewer_count: average_viewer_count,
+          samples: Enum.map(samples, &viewer_sample_json/1)
+        })
+    end
+  end
+
   def create_creator(conn, params) do
     case Streams.create_creator(%{
            external_id: Map.get(params, "external_id"),
@@ -88,13 +131,28 @@ defmodule Zer0StreamWeb.StreamController do
   def create_persistent(conn, _params),
     do: json(conn, %{error: "creator_id, title, and request_id are required"})
 
-  def rotate_key(conn, %{"id" => id}) do
+  def update_stream(conn, %{"id" => id, "title" => title}) do
     case Streams.get_stream(id) do
       nil ->
         send_resp(conn, :not_found, "")
 
       stream ->
-        case Streams.rotate_stream_key(stream) do
+        case Streams.update_stream(stream, %{title: title}) do
+          {:ok, stream} -> json(conn, %{stream: stream_json(stream)})
+          {:error, changeset} -> validation_error(conn, changeset)
+        end
+    end
+  end
+
+  def update_stream(conn, _params), do: json(conn, %{error: "title is required"})
+
+  def rotate_creator_key(conn, %{"id" => id}) do
+    case Streams.get_creator(id) do
+      nil ->
+        send_resp(conn, :not_found, "")
+
+      creator ->
+        case Streams.rotate_creator_stream_key(creator) do
           {:ok, %{key: key, token: token}} -> json(conn, %{stream_key: key_json(key, token)})
           {:error, changeset} -> validation_error(conn, changeset)
         end
@@ -116,5 +174,20 @@ defmodule Zer0StreamWeb.StreamController do
     %{id: stream.id, creator_id: stream.creator_id, title: stream.title, status: stream.status}
   end
 
-  defp key_json(key, token), do: %{id: key.id, stream_id: key.stream_id, token: token}
+  defp key_json(key, token), do: %{id: key.id, creator_id: key.creator_id, token: token}
+
+  defp viewer_sample_json(sample) do
+    %{
+      viewer_count: sample.viewer_count,
+      sampled_at: sample.sampled_at,
+      stream_session_id: sample.stream_session_id
+    }
+  end
+
+  defp parse_limit(limit) do
+    case Integer.parse(limit) do
+      {value, ""} -> value
+      _ -> 100
+    end
+  end
 end

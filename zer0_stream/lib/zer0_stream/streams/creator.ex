@@ -7,6 +7,7 @@ defmodule Zer0Stream.Streams.Creator do
     field(:display_name, :string)
 
     has_many(:streams, Zer0Stream.Streams.Stream)
+    has_many(:stream_keys, Zer0Stream.Streams.StreamKey)
     timestamps(type: :utc_datetime)
   end
 

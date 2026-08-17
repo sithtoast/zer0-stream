@@ -25,11 +25,13 @@ defmodule Zer0Media.RTMPServer do
         session_id = session["id"] || session[:id]
         Logger.info("Authorized RTMP session #{session_id} (#{connection_id})")
 
-        unless boombox_mode?() do
+        hls_output_dir = if boombox_mode?(), do: nil, else: hls_output_dir(session_id)
+
+        if hls_output_dir do
           {:ok, _hls_supervisor, _hls_pipeline} =
             Membrane.Pipeline.start_link(HLSPipeline,
               client_ref: client_ref,
-              output_dir: hls_output_dir(session_id),
+              output_dir: hls_output_dir,
               parent: self()
             )
         end
@@ -37,7 +39,12 @@ defmodule Zer0Media.RTMPServer do
         boombox_pid = maybe_start_relay(client_ref, session_id)
 
         {RTMPClientHandler,
-         %{client_ref: client_ref, connection_id: connection_id, boombox_pid: boombox_pid}}
+         %{
+           client_ref: client_ref,
+           connection_id: connection_id,
+           boombox_pid: boombox_pid,
+           hls_output_dir: hls_output_dir
+         }}
 
       {:error, reason} ->
         Logger.error("RTMP authorization failed #{connection_id}: #{inspect(reason)}")

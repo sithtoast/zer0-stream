@@ -10,7 +10,7 @@ defmodule Zer0Stream.IngestTest do
 
     {:ok, creator} = Streams.create_creator(%{external_id: "ingest-creator"})
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Ingest Test"})
-    {:ok, %{token: token}} = Streams.rotate_stream_key(stream)
+    {:ok, %{token: token}} = Streams.rotate_creator_stream_key(creator)
 
     {:ok, stream: stream, token: token}
   end
@@ -22,6 +22,13 @@ defmodule Zer0Stream.IngestTest do
     assert session.status == "live"
 
     assert %{status: "live"} = Streams.get_stream(stream.id)
+  end
+
+  test "allows only one channel stream per creator", %{stream: stream} do
+    assert {:error, changeset} =
+             Streams.create_stream(%{creator_id: stream.creator_id, title: "Second Channel"})
+
+    assert "has already been taken" in errors_on(changeset).creator_id
   end
 
   test "enqueues a started event with the session transition", %{token: token} do
@@ -44,7 +51,8 @@ defmodule Zer0Stream.IngestTest do
   test "rejects revoked or invalid keys", %{stream: stream, token: token} do
     assert {:error, :unauthorized} = Ingest.authorize_rtmp("invalid-key", "connection-2")
 
-    assert {:ok, %{token: replacement}} = Streams.rotate_stream_key(stream)
+    creator = Streams.get_creator!(stream.creator_id)
+    assert {:ok, %{token: replacement}} = Streams.rotate_creator_stream_key(creator)
     assert {:error, :unauthorized} = Ingest.authorize_rtmp(token, "connection-3")
     assert {:ok, _session} = Ingest.authorize_rtmp(replacement, "connection-4")
   end
@@ -79,4 +87,8 @@ defmodule Zer0Stream.IngestTest do
 
   defp restore_config(key, nil), do: Application.delete_env(:zer0_stream, key)
   defp restore_config(key, value), do: Application.put_env(:zer0_stream, key, value)
+
+  defp errors_on(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {message, _opts} -> message end)
+  end
 end

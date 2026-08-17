@@ -25,6 +25,7 @@ defmodule Zer0Stream.Streams do
     end
   end
 
+  def get_creator(id), do: Repo.get(Creator, id)
   def get_creator!(id), do: Repo.get!(Creator, id)
 
   def create_stream(attrs) do
@@ -77,6 +78,14 @@ defmodule Zer0Stream.Streams do
 
   def get_stream(id), do: Repo.get(Stream, id)
 
+  def update_stream(%Stream{} = stream, attrs) do
+    stream
+    |> Stream.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def get_stream_for_creator(creator_id), do: Repo.get_by(Stream, creator_id: creator_id)
+
   def list_streams do
     Repo.all(from(stream in Stream, preload: [:creator]))
   end
@@ -92,18 +101,18 @@ defmodule Zer0Stream.Streams do
     )
   end
 
-  def rotate_stream_key(%Stream{id: stream_id}) do
+  def rotate_creator_stream_key(%Creator{id: creator_id}) do
     token = generate_token()
 
     Repo.transaction(fn ->
       Repo.update_all(
-        from(key in StreamKey, where: key.stream_id == ^stream_id and is_nil(key.revoked_at)),
+        from(key in StreamKey, where: key.creator_id == ^creator_id and is_nil(key.revoked_at)),
         set: [revoked_at: DateTime.utc_now()]
       )
 
       {:ok, key} =
         %StreamKey{}
-        |> StreamKey.changeset(%{stream_id: stream_id, token_hash: StreamKey.hash_token(token)})
+        |> StreamKey.changeset(%{creator_id: creator_id, token_hash: StreamKey.hash_token(token)})
         |> Repo.insert()
 
       %{key: key, token: token}
@@ -116,7 +125,7 @@ defmodule Zer0Stream.Streams do
     Repo.one(
       from(key in StreamKey,
         where: key.token_hash == ^token_hash and is_nil(key.revoked_at),
-        preload: [stream: :creator]
+        preload: [:creator]
       )
     )
   end

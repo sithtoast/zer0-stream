@@ -25,6 +25,29 @@ defmodule Zer0Media.HLSRouter do
     |> send_resp(200, ~s({"ok":true,"service":"zer0-media","status":"healthy"}))
   end
 
+  get "/api/sessions/:id/viewers" do
+    if control_plane_request_authorized?(conn) do
+      %{
+        viewer_count: viewer_count,
+        updated_at: updated_at,
+        average_viewer_count_15m: average_viewer_count_15m
+      } = Zer0Media.ViewerTracker.count(id)
+
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(200, Jason.encode!(%{
+        session_id: session_id_value(id),
+        viewer_count: viewer_count,
+        average_viewer_count_15m: average_viewer_count_15m,
+        updated_at: DateTime.to_iso8601(updated_at)
+      }))
+    else
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(401, ~s({"error":"unauthorized"}))
+    end
+  end
+
   get "/hls/*path" do
     serve_file(conn, path)
   end
@@ -45,7 +68,7 @@ defmodule Zer0Media.HLSRouter do
     conn = put_cors_headers(conn)
     base = Path.expand(root_dir)
     requested = Path.join([base | path_segments]) |> Path.expand()
-    session_id = boombox_session_id(path_segments)
+    session_id = stream_session_id(path_segments)
 
     cond do
       not String.starts_with?(requested, base <> "/") ->
@@ -58,15 +81,35 @@ defmodule Zer0Media.HLSRouter do
         send_resp(conn, 401, "unauthorized")
 
       protected? and Path.extname(requested) == ".m3u8" ->
-        body = requested |> File.read!() |> normalize_boombox_playlist(conn.query_params["token"])
+        {viewer_id, conn} = viewer_id(conn)
+
+        body =
+          requested
+          |> File.read!()
+          |> normalize_boombox_playlist(conn.query_params["token"])
+          |> append_viewer_id(viewer_id)
 
         conn
+        |> track_viewer(session_id, viewer_id)
+        |> put_resp_content_type(content_type(requested))
+        |> put_resp_header("cache-control", "no-cache")
+        |> send_resp(200, body)
+
+      Path.extname(requested) == ".m3u8" ->
+        {viewer_id, conn} = viewer_id(conn)
+        body = requested |> File.read!() |> append_viewer_id(viewer_id)
+
+        conn
+        |> track_viewer(session_id, viewer_id)
         |> put_resp_content_type(content_type(requested))
         |> put_resp_header("cache-control", "no-cache")
         |> send_resp(200, body)
 
       true ->
+        {viewer_id, conn} = viewer_id(conn)
+
         conn
+        |> track_viewer(session_id, viewer_id)
         |> put_resp_content_type(content_type(requested))
         |> put_resp_header("cache-control", "no-cache")
         |> send_file(200, requested)
@@ -121,11 +164,84 @@ defmodule Zer0Media.HLSRouter do
     end
   end
 
-  defp boombox_session_id(["stream-session-" <> session_id | _]) do
+  defp append_viewer_id(body, viewer_id) do
+    body
+    |> String.split("\n")
+    |> Enum.map(&append_viewer_id_to_line(&1, viewer_id))
+    |> Enum.join("\n")
+  end
+
+  defp append_viewer_id_to_line(line, viewer_id) do
+    cond do
+      String.starts_with?(line, "#EXT-X-MAP:URI=\"") ->
+        Regex.replace(~r/URI="([^"]+)"/, line, fn _, url ->
+          "URI=\"#{append_query_param(url, "viewer_id", viewer_id)}\""
+        end)
+
+      line == "" or String.starts_with?(line, "#") ->
+        line
+
+      true ->
+        append_query_param(line, "viewer_id", viewer_id)
+    end
+  end
+
+  defp append_query_param(url, key, value) do
+    uri = URI.parse(url)
+    query = uri.query |> to_string() |> URI.decode_query() |> Map.put(key, value) |> URI.encode_query()
+    URI.to_string(%{uri | query: query})
+  end
+
+  defp control_plane_request_authorized?(conn) do
+    Zer0Media.ControlPlaneAuth.valid?(
+      conn.method,
+      conn.request_path,
+      %{},
+      get_req_header(conn, "x-zer0-timestamp") |> List.first(),
+      get_req_header(conn, "x-zer0-signature") |> List.first()
+    )
+  end
+
+  defp track_viewer(conn, nil, _viewer_id), do: conn
+
+  defp track_viewer(conn, session_id, viewer_id) do
+    :ok = Zer0Media.ViewerTracker.heartbeat(session_id, viewer_id)
+    conn
+  end
+
+  defp viewer_id(conn) do
+    conn = fetch_cookies(conn)
+
+    case conn.query_params["viewer_id"] || conn.cookies["zer0_viewer_id"] do
+      viewer_id when is_binary(viewer_id) and byte_size(viewer_id) in 1..128 ->
+        {viewer_id, conn}
+
+      _ ->
+        viewer_id = :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
+
+        {viewer_id,
+         put_resp_cookie(conn, "zer0_viewer_id", viewer_id,
+           http_only: true,
+           same_site: "Lax",
+           max_age: viewer_cookie_max_age()
+         )}
+    end
+  end
+
+  defp viewer_cookie_max_age, do: Application.get_env(:zer0_media, :viewer_cookie_max_age, 86_400)
+
+  defp stream_session_id(["stream-session-" <> session_id | _]) do
     session_id
   end
 
-  defp boombox_session_id(_path_segments), do: nil
+  defp stream_session_id(_path_segments), do: nil
+
+  defp session_id_value(id) do
+    case Integer.parse(id) do
+      {stream_id, ""} -> stream_id
+      :error -> id
+    end
+  end
 
   defp hls_dir do
     Application.get_env(:zer0_media, :hls_dir, "priv/hls")
