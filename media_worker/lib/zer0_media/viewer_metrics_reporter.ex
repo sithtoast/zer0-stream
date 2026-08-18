@@ -22,8 +22,18 @@ defmodule Zer0Media.ViewerMetricsReporter do
     Zer0Media.ViewerTracker.samples()
     |> Enum.each(fn {session_id, viewer_count} ->
       case Zer0Media.ControlPlane.record_viewer_sample(session_id, viewer_count) do
-        :ok -> :ok
-        {:error, reason} -> Logger.warning("unable to record viewer sample: #{inspect(reason)}")
+        :ok ->
+          :ok
+
+        {:error, {:control_plane, 404}} ->
+          # Session is no longer live on the control plane (e.g. stream already
+          # stopped); stragglers still polling the HLS heartbeat endpoint would
+          # otherwise keep re-populating the tracker and retrying forever.
+          Logger.debug("session #{session_id} no longer live; dropping viewer tracking")
+          Zer0Media.ViewerTracker.stop(session_id)
+
+        {:error, reason} ->
+          Logger.warning("unable to record viewer sample: #{inspect(reason)}")
       end
     end)
 

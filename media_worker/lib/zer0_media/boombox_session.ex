@@ -48,6 +48,10 @@ defmodule Zer0Media.BoomboxSession do
 
   @impl true
   def init(opts) do
+    # trap parent exits so terminate/2 (and its HLS cleanup scheduling) actually runs
+    # instead of the process being killed outright on supervised shutdown.
+    Process.flag(:trap_exit, true)
+
     session_id = Keyword.fetch!(opts, :session_id)
     port = Keyword.get(opts, :port, free_port())
     input_url = "rtmp://127.0.0.1:#{port}/live/#{session_id}"

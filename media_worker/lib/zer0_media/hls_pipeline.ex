@@ -7,8 +7,15 @@ defmodule Zer0Media.HLSPipeline do
   def handle_init(_ctx, opts) do
     output_dir = Keyword.fetch!(opts, :output_dir)
     storage = HLS.Storage.File.new(base_dir: output_dir)
-    segment_duration = configured_duration(:hls_segment_duration, Membrane.Time.seconds(30))
-    safety_delay = configured_duration(:hls_safety_delay, segment_duration)
+    # 30s segments (previous default) forced ~90s of live latency since players must
+    # buffer multiple whole segments behind the live edge. 2s matches the keyframe
+    # interval most encoders (OBS, etc.) use by default and is what Twitch itself
+    # targets for standard (non-LL) HLS, cutting latency to a few seconds.
+    segment_duration = configured_duration(:hls_segment_duration, Membrane.Time.seconds(2))
+    # Sliding-window safety_delay defers the live edge to absorb late-arriving
+    # segments; defaulting it to the full segment_duration (2s) was overly
+    # conservative now that segments are short, so trim it to half a segment.
+    safety_delay = configured_duration(:hls_safety_delay, div(segment_duration, 2))
     max_segments = configured_integer(:hls_max_segments, 30)
     audio_rate = configured_rate(:aac_timestamp_rate, 1.0)
 

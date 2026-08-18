@@ -7,6 +7,8 @@ defmodule Zer0Media.Application do
 
   @impl true
   def start(_type, _args) do
+    Logger.configure(level: log_level())
+
     children = [
       Zer0Media.BoomboxSessionSupervisor,
       Zer0Media.HLSCleanup,
@@ -19,6 +21,15 @@ defmodule Zer0Media.Application do
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Zer0Media.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  # Membrane's default :debug logging is extremely verbose (full pipeline spec
+  # dumps per stream); default to :info unless LOG_LEVEL overrides it.
+  defp log_level do
+    case System.get_env("LOG_LEVEL") do
+      nil -> :info
+      level -> String.to_atom(level)
+    end
   end
 
   defp http_port do
