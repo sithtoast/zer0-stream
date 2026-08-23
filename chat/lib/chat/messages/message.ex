@@ -7,6 +7,7 @@ defmodule Chat.Messages.Message do
     field :sender_id, :string
     field :sender_display_name, :string
     field :body, :string
+    field :first_message, :boolean, default: false
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end

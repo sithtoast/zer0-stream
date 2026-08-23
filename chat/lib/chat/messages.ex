@@ -18,8 +18,21 @@ defmodule Chat.Messages do
   end
 
   def create_message(attrs) do
+    channel_id = attrs[:channel_id] || attrs["channel_id"]
+    sender_id = attrs[:sender_id] || attrs["sender_id"]
+
     %Message{}
     |> Message.changeset(attrs)
+    |> Ecto.Changeset.put_change(:first_message, first_message?(channel_id, sender_id))
     |> Repo.insert()
   end
+
+  defp first_message?(channel_id, sender_id) when is_binary(channel_id) and is_binary(sender_id) do
+    Message
+    |> where([message], message.channel_id == ^channel_id and message.sender_id == ^sender_id)
+    |> Repo.exists?()
+    |> Kernel.not()
+  end
+
+  defp first_message?(_channel_id, _sender_id), do: false
 end

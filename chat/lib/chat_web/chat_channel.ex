@@ -80,6 +80,7 @@ defmodule ChatWeb.ChatChannel do
       id: message.id,
       body: message.body,
       channel_id: message.channel_id,
+      first_message: message.first_message,
       sender: %{
         id: message.sender_id,
         display_name: message.sender_display_name

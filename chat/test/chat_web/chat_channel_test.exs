@@ -31,6 +31,14 @@ defmodule ChatWeb.ChatChannelTest do
     assert [%{body: "hello", sender_id: "user-1"}] = Messages.recent("test-channel")
   end
 
+  test "flags a user's first message in a channel", %{socket: socket} do
+    push(socket, "message", %{"body" => "hello"})
+    assert_push "message", %{body: "hello", first_message: true}
+
+    push(socket, "message", %{"body" => "hello again"})
+    assert_push "message", %{body: "hello again", first_message: false}
+  end
+
   test "rejects empty and oversized messages", %{socket: socket} do
     empty_ref = push(socket, "message", %{"body" => "   "})
     assert_reply empty_ref, :error, %{reason: "empty_message"}
