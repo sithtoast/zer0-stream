@@ -40,3 +40,7 @@ zer0_media-*.tar
 
 # Editor and tooling caches
 **/.elixir_ls/
+media_worker/log.md
+media_worker/crash.md
+media_worker/.DS_Store
+.DS_Store

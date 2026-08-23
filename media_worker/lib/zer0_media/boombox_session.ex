@@ -54,6 +54,7 @@ defmodule Zer0Media.BoomboxSession do
 
     session_id = Keyword.fetch!(opts, :session_id)
     port = Keyword.get(opts, :port, free_port())
+    webrtc_port = free_port()
     input_url = "rtmp://127.0.0.1:#{port}/live/#{session_id}"
     output_dir = Path.join(boombox_hls_dir(), "stream-session-#{session_id}")
     output = Path.join(output_dir, "master.m3u8")
@@ -74,13 +75,15 @@ defmodule Zer0Media.BoomboxSession do
            {~c"MIX_HOME", String.to_charlist(Path.expand("../.mix-boombox", runtime_dir))},
            {~c"HEX_HOME", String.to_charlist(Path.expand("../.hex-boombox", runtime_dir))},
            {~c"BOOMBOX_INPUT_URL", String.to_charlist(input_url)},
-           {~c"BOOMBOX_OUTPUT", String.to_charlist(output)}
+           {~c"BOOMBOX_OUTPUT", String.to_charlist(output)},
+           {~c"BOOMBOX_WEBRTC_PORT", String.to_charlist(Integer.to_string(webrtc_port))}
          ]
          |> then(&pass_hls_segment_duration(&1))}
       ])
 
     await_listener!(port)
     Logger.info("Boombox session #{session_id} starting on #{input_url}")
+    Logger.info("WebRTC signaling at ws://localhost:#{webrtc_port} (session #{session_id})")
     {:ok, %{port: port_handle, relay_url: input_url, output: output}}
   end
 
@@ -125,12 +128,19 @@ defmodule Zer0Media.BoomboxSession do
     System.get_env("BOOMBOX_MIX_ENV", System.get_env("MIX_ENV", "dev"))
   end
 
-  # Forward HLS_SEGMENT_DURATION (nanoseconds) from the media worker into the
-  # Boombox subprocess so shorter HLS segments can be tested for lower latency.
+  # Forward tuning/config env vars from the media worker into the Boombox
+  # subprocess: HLS segment duration and the WebRTC output mode. The WebRTC
+  # signaling port is generated per-session in init/1 and passed explicitly.
   defp pass_hls_segment_duration(env) do
-    case System.get_env("HLS_SEGMENT_DURATION") do
+    env
+    |> forward_env("HLS_SEGMENT_DURATION")
+    |> forward_env("BOOMBOX_OUTPUT_MODE")
+  end
+
+  defp forward_env(env, name) do
+    case System.get_env(name) do
       nil -> env
-      value -> env ++ [{~c"HLS_SEGMENT_DURATION", String.to_charlist(value)}]
+      value -> env ++ [{String.to_charlist(name), String.to_charlist(value)}]
     end
   end
 
