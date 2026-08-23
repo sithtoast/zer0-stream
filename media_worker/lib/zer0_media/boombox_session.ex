@@ -75,7 +75,8 @@ defmodule Zer0Media.BoomboxSession do
            {~c"HEX_HOME", String.to_charlist(Path.expand("../.hex-boombox", runtime_dir))},
            {~c"BOOMBOX_INPUT_URL", String.to_charlist(input_url)},
            {~c"BOOMBOX_OUTPUT", String.to_charlist(output)}
-         ]}
+         ]
+         |> then(&pass_hls_segment_duration(&1))}
       ])
 
     await_listener!(port)
@@ -122,6 +123,15 @@ defmodule Zer0Media.BoomboxSession do
 
   defp boombox_mix_env do
     System.get_env("BOOMBOX_MIX_ENV", System.get_env("MIX_ENV", "dev"))
+  end
+
+  # Forward HLS_SEGMENT_DURATION (nanoseconds) from the media worker into the
+  # Boombox subprocess so shorter HLS segments can be tested for lower latency.
+  defp pass_hls_segment_duration(env) do
+    case System.get_env("HLS_SEGMENT_DURATION") do
+      nil -> env
+      value -> env ++ [{~c"HLS_SEGMENT_DURATION", String.to_charlist(value)}]
+    end
   end
 
   defp await_listener!(port, attempts \\ 300)
