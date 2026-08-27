@@ -11,23 +11,11 @@ defmodule Zer0Media.WebRTCBin do
 
   Its input pads are dynamic (`on_request`) and are only linked once playback
   starts and tracks are negotiated.
-
-  ## Connection watchdog (safety net)
-
-  The underlying ICE agent can fail if the network drops.  This 10‑minute
-  watchdog is a last-resort safety net that restarts the bin if the peer
-  connection state machine gets stuck.  Under normal operation the
-  `ExWebRTCSink` handles `:connection_state_change, :failed` and terminates
-  on its own, which triggers the parent's crash-group restart.
   """
   use Membrane.Bin
 
-  require Membrane.Logger
-
   alias Membrane.{Connector, H264, Opus, RTP}
   alias Membrane.WebRTC.ExWebRTCSink
-
-  @watchdog_interval_ms 600_000
 
   def_input_pad :input,
     availability: :on_request,
@@ -58,12 +46,8 @@ defmodule Zer0Media.WebRTCBin do
         ice_ip_filter: opts.ice_ip_filter
       })
 
-    {[spec: spec], %{video_codec: opts.video_codec, watchdog_timer: nil}}
+    {[spec: spec], %{video_codec: opts.video_codec}}
   end
-
-  # No handle_setup override: the default completes this bin's setup immediately,
-  # so the parent pipeline isn't gated by the inner ExWebRTCSink, which stays
-  # `:incomplete` until a viewer connects.
 
   @impl true
   def handle_pad_added(Pad.ref(:input, pid) = pad_ref, ctx, state) do
@@ -108,14 +92,7 @@ defmodule Zer0Media.WebRTCBin do
 
   @impl true
   def handle_child_notification(:connected, :webrtc, _ctx, state) do
-    Membrane.Logger.info("WebRTCBin connected — starting #{div(@watchdog_interval_ms, 1000)}s watchdog")
-
-    # Cancel any previous timer first (shouldn't exist, but be safe)
-    state = cancel_watchdog(state)
-
-    timer = Process.send_after(self(), :watchdog_tick, @watchdog_interval_ms)
-
-    {[notify_parent: :connected], %{state | watchdog_timer: timer}}
+    {[notify_parent: :connected], state}
   end
 
   @impl true
@@ -127,23 +104,5 @@ defmodule Zer0Media.WebRTCBin do
   @impl true
   def handle_parent_notification({:add_tracks, tracks}, _ctx, state) do
     {[notify_child: {:webrtc, {:add_tracks, tracks}}], state}
-  end
-
-  # ── Watchdog ───────────────────────────────────────────────────────────────
-
-  @impl true
-  def handle_info(:watchdog_tick, _ctx, state) do
-    Membrane.Logger.warning(
-      "WebRTCBin watchdog fired — restarting before ICE timeout"
-    )
-
-    {[terminate: {:shutdown, :watchdog}], cancel_watchdog(state)}
-  end
-
-  defp cancel_watchdog(%{watchdog_timer: nil} = state), do: state
-
-  defp cancel_watchdog(%{watchdog_timer: timer} = state) when is_reference(timer) do
-    Process.cancel_timer(timer)
-    %{state | watchdog_timer: nil}
   end
 end
