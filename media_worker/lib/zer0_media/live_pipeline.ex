@@ -24,6 +24,7 @@ defmodule Zer0Media.LivePipeline do
     client_ref = Keyword.fetch!(opts, :client_ref)
     output_dir = Keyword.fetch!(opts, :output_dir)
     webrtc_port = Keyword.fetch!(opts, :webrtc_port)
+    session_id = Keyword.get(opts, :session_id)
 
     source = Keyword.get(opts, :source, %RTMP.SourceBin{client_ref: client_ref})
 
@@ -78,6 +79,9 @@ defmodule Zer0Media.LivePipeline do
        parent: opts[:parent],
        output_dir: output_dir,
        webrtc_port: webrtc_port,
+       session_id: session_id,
+       webrtc_viewer_id: nil,
+       webrtc_heartbeat_timer: nil,
        webrtc_tracks: nil,
        webrtc_connected?: false,
        webrtc_audio_linked?: false,
@@ -107,6 +111,8 @@ defmodule Zer0Media.LivePipeline do
   def handle_child_notification(:connected, :webrtc, _ctx, state) do
     Membrane.Logger.info("LIVEPIPE WebRTC peer connected")
 
+    # Start viewer heartbeat for this WebRTC connection.
+    state = start_webrtc_heartbeat(state)
     state = %{state | webrtc_connected?: true}
 
     if state.webrtc_tracks do
@@ -124,6 +130,36 @@ defmodule Zer0Media.LivePipeline do
 
   @impl true
   def handle_child_notification(_notification, _child, _ctx, state), do: {[], state}
+
+  # ── Viewer heartbeat (WebRTC) ─────────────────────────────────────────────
+
+  @impl true
+  def handle_info(:webrtc_heartbeat_tick, _ctx, state) do
+    if state.webrtc_viewer_id && state.session_id do
+      Zer0Media.ViewerTracker.heartbeat(to_string(state.session_id), state.webrtc_viewer_id)
+    end
+
+    timer = Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
+    {[], %{state | webrtc_heartbeat_timer: timer}}
+  end
+
+  defp start_webrtc_heartbeat(%{webrtc_viewer_id: nil} = state) do
+    viewer_id = :crypto.strong_rand_bytes(16) |> Base.url_encode64()
+    timer = Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
+
+    if state.session_id do
+      Zer0Media.ViewerTracker.heartbeat(to_string(state.session_id), viewer_id)
+    end
+
+    %{state | webrtc_viewer_id: viewer_id, webrtc_heartbeat_timer: timer}
+  end
+
+  defp start_webrtc_heartbeat(state), do: state
+
+  defp stop_webrtc_heartbeat(state) do
+    if state.webrtc_heartbeat_timer, do: Process.cancel_timer(state.webrtc_heartbeat_timer)
+    %{state | webrtc_heartbeat_timer: nil}
+  end
 
   defp link_webrtc_legs(tracks, state) do
     {spec, state} =
@@ -175,6 +211,9 @@ defmodule Zer0Media.LivePipeline do
   def handle_crash_group_down(:webrtc_output, _ctx, state) do
     Membrane.Logger.warning("WebRTC output group went down — restarting")
 
+    # Stop the old viewer heartbeat (viewer will get a new one on reconnect).
+    state = stop_webrtc_heartbeat(state)
+
     spec =
       {child(:webrtc, %Zer0Media.WebRTCBin{
          signaling: {:websocket, [port: state.webrtc_port]},
@@ -184,7 +223,7 @@ defmodule Zer0Media.LivePipeline do
 
     {[spec: spec, notify_child: {:webrtc, {:add_tracks, [:audio, :video]}}],
      %{state | webrtc_tracks: nil, webrtc_connected?: false, webrtc_audio_linked?: false,
-               webrtc_video_linked?: false}}
+               webrtc_video_linked?: false, webrtc_viewer_id: nil}}
   end
 
   # ── End-of-stream / cleanup ────────────────────────────────────────────────

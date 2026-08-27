@@ -74,6 +74,7 @@ defmodule Zer0Media.RTMPServer do
            client_ref: client_ref,
            output_dir: output_dir,
            webrtc_port: webrtc_port,
+           session_id: session_id,
            parent: self()
          ) do
       {:ok, _supervisor, pipeline} ->
