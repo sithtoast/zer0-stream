@@ -14,6 +14,13 @@ defmodule Zer0Media.ControlPlane do
     request(:post, "/api/ingest/rtmp/reconcile", %{})
   end
 
+  def report_webrtc(session_id, webrtc_url) do
+    request(:put, "/api/ingest/sessions/#{session_id}/webrtc", %{
+      session_id: session_id,
+      webrtc_url: webrtc_url
+    })
+  end
+
   def record_viewer_sample(session_id, viewer_count) do
     request(:post, "/api/ingest/sessions/#{session_id}/viewer-samples", %{
       viewer_count: viewer_count

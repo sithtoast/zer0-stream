@@ -54,6 +54,7 @@ defmodule Zer0StreamWeb.Router do
     post "/rtmp/:connection_id/stop", IngestController, :stop
     post "/rtmp/reconcile", IngestController, :reconcile
     post "/sessions/:session_id/viewer-samples", IngestController, :viewer_sample
+    put "/sessions/:session_id/webrtc", IngestController, :register_webrtc
   end
 
   # Enable LiveDashboard in development

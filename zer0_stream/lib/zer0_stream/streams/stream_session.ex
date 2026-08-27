@@ -8,6 +8,7 @@ defmodule Zer0Stream.Streams.StreamSession do
     field(:status, :string, default: "live")
     field(:started_at, :utc_datetime)
     field(:ended_at, :utc_datetime)
+    field(:webrtc_url, :string)
 
     belongs_to(:stream, Zer0Stream.Streams.Stream)
     belongs_to(:stream_key, Zer0Stream.Streams.StreamKey)
@@ -16,7 +17,7 @@ defmodule Zer0Stream.Streams.StreamSession do
 
   def changeset(session, attrs) do
     session
-    |> cast(attrs, [:connection_id, :protocol, :status, :started_at, :stream_id, :stream_key_id])
+    |> cast(attrs, [:connection_id, :protocol, :status, :started_at, :stream_id, :stream_key_id, :webrtc_url])
     |> validate_required([:connection_id, :protocol, :status, :stream_id, :stream_key_id])
     |> validate_inclusion(:protocol, ["rtmp"])
     |> validate_inclusion(:status, ["live", "ended"])

@@ -1,5 +1,5 @@
 defmodule Zer0Media.RTMPServer do
-  alias Zer0Media.{ControlPlane, HLSPipeline, RTMPClientHandler, RTMPRelayPipeline}
+  alias Zer0Media.{ControlPlane, RTMPClientHandler, RTMPRelayPipeline}
 
   require Logger
 
@@ -25,27 +25,33 @@ defmodule Zer0Media.RTMPServer do
         session_id = session["id"] || session[:id]
         Logger.info("Authorized RTMP session #{session_id} (#{connection_id})")
 
-        hls_output_dir = if boombox_mode?(), do: nil, else: hls_output_dir(session_id)
+        if live_pipeline_mode?() do
+          {live_pipeline_pid, webrtc_port} = start_live_pipeline(client_ref, session_id)
 
-        if hls_output_dir do
-          {:ok, _hls_supervisor, _hls_pipeline} =
-            Membrane.Pipeline.start_link(HLSPipeline,
-              client_ref: client_ref,
-              output_dir: hls_output_dir,
-              parent: self()
-            )
+          {RTMPClientHandler,
+           %{
+             client_ref: client_ref,
+             connection_id: connection_id,
+             session_id: session_id,
+             boombox_pid: nil,
+             live_pipeline_pid: live_pipeline_pid,
+             webrtc_port: webrtc_port,
+             hls_output_dir: hls_output_dir(session_id)
+           }}
+        else
+          boombox_pid = maybe_start_relay(client_ref, session_id)
+
+          {RTMPClientHandler,
+           %{
+             client_ref: client_ref,
+             connection_id: connection_id,
+             session_id: session_id,
+             boombox_pid: boombox_pid,
+             live_pipeline_pid: nil,
+             webrtc_port: nil,
+             hls_output_dir: nil
+           }}
         end
-
-        boombox_pid = maybe_start_relay(client_ref, session_id)
-
-        {RTMPClientHandler,
-         %{
-           client_ref: client_ref,
-           connection_id: connection_id,
-           session_id: session_id,
-           boombox_pid: boombox_pid,
-           hls_output_dir: hls_output_dir
-         }}
 
       {:error, reason} ->
         Logger.error("RTMP authorization failed #{connection_id}: #{inspect(reason)}")
@@ -58,6 +64,45 @@ defmodule Zer0Media.RTMPServer do
     path = Path.join(output_dir, "stream-session-#{session_id}")
     File.mkdir_p!(path)
     path
+  end
+
+  defp start_live_pipeline(client_ref, session_id) do
+    webrtc_port = free_port()
+    output_dir = hls_output_dir(session_id)
+
+    case Membrane.Pipeline.start_link(Zer0Media.LivePipeline,
+           client_ref: client_ref,
+           output_dir: output_dir,
+           webrtc_port: webrtc_port,
+           parent: self()
+         ) do
+      {:ok, _supervisor, pipeline} ->
+        signaling_url = "ws://localhost:#{webrtc_port}"
+
+        Logger.info(
+          "Live pipeline session #{session_id} ready; " <>
+            "WebRTC signaling at #{signaling_url}"
+        )
+
+        ControlPlane.report_webrtc(session_id, signaling_url)
+
+        {pipeline, webrtc_port}
+
+      {:error, reason} ->
+        Logger.error("Unable to start live pipeline: #{inspect(reason)}")
+        {nil, nil}
+    end
+  end
+
+  defp free_port do
+    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, {_address, port}} = :inet.sockname(socket)
+    :gen_tcp.close(socket)
+    port
+  end
+
+  defp live_pipeline_mode? do
+    System.get_env("LIVE_PIPELINE_MODE", "false") in ["1", "true"]
   end
 
   defp maybe_start_relay(client_ref, session_id) do

@@ -70,6 +70,19 @@ defmodule Zer0StreamWeb.IngestController do
     |> json(%{error: "viewer_count is required"})
   end
 
+  def register_webrtc(conn, %{"session_id" => session_id, "webrtc_url" => webrtc_url}) do
+    case Zer0Stream.Ingest.register_webrtc(session_id, webrtc_url) do
+      {:ok, _session} -> json(conn, %{ok: true})
+      {:error, :not_found} -> send_resp(conn, :not_found, "")
+    end
+  end
+
+  def register_webrtc(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "session_id and webrtc_url are required"})
+  end
+
   defp session_json(session) do
     %{
       id: session.id,

@@ -148,6 +148,13 @@ defmodule Zer0Stream.Ingest do
     end
   end
 
+  def register_webrtc(session_id, webrtc_url) do
+    case Repo.get(StreamSession, session_id) do
+      nil -> {:error, :not_found}
+      session -> {:ok, session |> Ecto.Changeset.change(webrtc_url: webrtc_url) |> Repo.update!()}
+    end
+  end
+
   defp stream_event_data(session) do
     %{
       stream: %{

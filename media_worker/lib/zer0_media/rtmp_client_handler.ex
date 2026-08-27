@@ -17,6 +17,8 @@ defmodule Zer0Media.RTMPClientHandler do
       connection_id: opts.connection_id,
       session_id: opts.session_id,
       boombox_pid: opts[:boombox_pid],
+      live_pipeline_pid: opts[:live_pipeline_pid],
+      webrtc_port: opts[:webrtc_port],
       hls_output_dir: opts[:hls_output_dir],
       idle_timer: nil,
       ended?: false
@@ -75,6 +77,10 @@ defmodule Zer0Media.RTMPClientHandler do
 
     if state.boombox_pid do
       Zer0Media.BoomboxSessionSupervisor.stop_session(state.boombox_pid)
+    end
+
+    if state.live_pipeline_pid do
+      Membrane.Pipeline.terminate(state.live_pipeline_pid)
     end
 
     if state.hls_output_dir do

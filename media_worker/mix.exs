@@ -23,7 +23,11 @@ defmodule Zer0Media.MixProject do
   defp deps do
     [
       {:membrane_rtmp_plugin, "~> 0.29.5"},
-      {:membrane_hls_plugin, "~> 3.0"},
+      {:membrane_http_adaptive_stream_plugin, "~> 0.20"},
+      {:membrane_webrtc_plugin, "~> 0.26"},
+      {:membrane_tee_plugin, "~> 0.12"},
+      {:membrane_opus_plugin, "~> 0.20"},
+      {:membrane_aac_fdk_plugin, "~> 0.18"},
       {:req, "~> 0.5"},
       {:bandit, "~> 1.5"},
       {:plug, "~> 1.16"}

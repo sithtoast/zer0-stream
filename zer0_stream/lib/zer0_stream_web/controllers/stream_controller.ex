@@ -41,12 +41,21 @@ defmodule Zer0StreamWeb.StreamController do
         playlist =
           "#{base_url}/hls-boombox/stream-session-#{session.id}/master.m3u8?token=#{token}"
 
-        json(conn, %{
+        resp = %{
           stream_id: session.stream_id,
           session_id: session.id,
           playback_url: playlist,
           playback_expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
-        })
+        }
+
+        resp =
+          if session.webrtc_url do
+            Map.put(resp, :webrtc_url, session.webrtc_url)
+          else
+            resp
+          end
+
+        json(conn, resp)
     end
   end
 

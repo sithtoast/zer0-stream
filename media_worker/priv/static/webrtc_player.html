@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebRTC Player</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
+    h1 { font-size: 1.2rem; }
+    label { display: block; margin: 0.5rem 0; }
+    input { width: 26rem; padding: 0.4rem; }
+    button { padding: 0.5rem 1rem; margin-top: 0.5rem; cursor: pointer; }
+    video { width: 100%; max-width: 640px; background: #000; margin-top: 1rem; }
+    #status { margin-top: 1rem; font-family: monospace; white-space: pre-wrap; }
+    .ok { color: #7c5; }
+    .err { color: #e55; }
+  </style>
+</head>
+<body>
+  <h1>WebRTC Playback</h1>
+  <label>
+    WebSocket signaling URL
+    <input id="wsUrl" type="text" placeholder="ws://localhost:52760" />
+  </label>
+  <button id="connect">Connect</button>
+  <video id="video" autoplay muted playsinline></video>
+  <div id="status"></div>
+
+  <script>
+    const video = document.getElementById('video');
+    const statusEl = document.getElementById('status');
+    const wsUrlInput = document.getElementById('wsUrl');
+    const connectBtn = document.getElementById('connect');
+
+    // Pre-fill from query param ?ws=...
+    const params = new URLSearchParams(location.search);
+    const wsParam = params.get('ws');
+    if (wsParam) wsUrlInput.value = wsParam;
+
+    let pc = null;
+    let ws = null;
+
+    function log(msg, cls) {
+      statusEl.innerHTML += `<div class="${cls || ''}">${msg}</div>`;
+      console.log(msg);
+    }
+
+    function reset() {
+      if (pc) { pc.close(); pc = null; }
+      if (ws) { ws.close(); ws = null; }
+      video.srcObject = null;
+    }
+
+    connectBtn.addEventListener('click', () => {
+      reset();
+      const url = wsUrlInput.value.trim();
+      if (!url) { log('Provide a WebSocket URL', 'err'); return; }
+
+      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      video.srcObject = new MediaStream();
+
+      pc.ontrack = (event) => {
+        log(`ontrack: ${event.track.kind}`);
+        video.srcObject.addTrack(event.track);
+      };
+
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) {
+          log(`Sending ICE candidate: ${ev.candidate.candidate}`);
+          ws.send(JSON.stringify({ type: 'ice_candidate', data: ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate }));
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        log(`connectionState: ${pc.connectionState}`, pc.connectionState === 'connected' ? 'ok' : '');
+      };
+
+      ws = new WebSocket(url);
+      ws.onopen = () => log('WebSocket open');
+      ws.onerror = (e) => log('WebSocket error', 'err');
+      ws.onclose = () => log('WebSocket closed');
+
+      ws.onmessage = async (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch (e) { log('Bad message: ' + event.data, 'err'); return; }
+        log(`Received: ${msg.type}`);
+
+        if (msg.type === 'sdp_offer') {
+          await pc.setRemoteDescription(msg.data);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          ws.send(JSON.stringify({ type: 'sdp_answer', data: answer }));
+          log('Sent SDP answer');
+        } else if (msg.type === 'ice_candidate') {
+          if (msg.data) await pc.addIceCandidate(msg.data);
+        }
+      };
+    });
+  </script>
+</body>
+</html>
