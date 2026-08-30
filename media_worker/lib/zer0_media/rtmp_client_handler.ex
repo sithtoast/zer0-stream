@@ -9,6 +9,7 @@ defmodule Zer0Media.RTMPClientHandler do
   @impl true
   def handle_init(opts) do
     ClientHandler.demand_data(opts.client_ref, 1)
+    Zer0Media.SessionTracker.touch(opts.session_id)
 
     %{
       client_ref: opts.client_ref,
@@ -72,6 +73,7 @@ defmodule Zer0Media.RTMPClientHandler do
   end
 
   defp stop_session(state) do
+    Zer0Media.SessionTracker.untouch(state.session_id)
     _ = ControlPlane.stop(state.connection_id)
     Zer0Media.ViewerTracker.stop(state.session_id)
 

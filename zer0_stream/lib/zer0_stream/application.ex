@@ -13,6 +13,7 @@ defmodule Zer0Stream.Application do
       {DNSCluster, query: Application.get_env(:zer0_stream, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Zer0Stream.PubSub},
       Zer0Stream.WebhookDeliveryWorker,
+      Zer0Stream.SessionReconciler,
       # Start a worker by calling: Zer0Stream.Worker.start_link(arg)
       # {Zer0Stream.Worker, arg},
       # Start to serve requests, typically the last entry

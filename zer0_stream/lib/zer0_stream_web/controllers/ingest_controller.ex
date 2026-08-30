@@ -40,6 +40,13 @@ defmodule Zer0StreamWeb.IngestController do
     json(conn, %{ended_sessions: ended_count})
   end
 
+  def heartbeat(conn, %{"session_id" => session_id}) do
+    case Zer0Stream.Ingest.heartbeat(session_id) do
+      :ok -> json(conn, %{ok: true})
+      {:error, :not_found} -> send_resp(conn, :not_found, "")
+    end
+  end
+
   def viewer_sample(conn, %{"session_id" => session_id, "viewer_count" => viewer_count}) do
     case Zer0Stream.Viewers.record_sample(session_id, viewer_count) do
       {:ok, sample} ->

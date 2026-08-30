@@ -4,6 +4,7 @@ defmodule Zer0Stream.IngestTest do
   import Ecto.Query
 
   alias Zer0Stream.{Ingest, Repo, Streams, WebhookDelivery}
+  alias Zer0Stream.Streams.{StreamSession, StreamUpdate}
 
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Zer0Stream.Repo)
@@ -61,6 +62,109 @@ defmodule Zer0Stream.IngestTest do
     assert {:ok, _session} = Ingest.authorize_rtmp(token, "connection-5")
     assert {:ok, %{status: "ended"}} = Ingest.stop_session("connection-5")
     assert %{status: "offline"} = Streams.get_stream(stream.id)
+  end
+
+  test "heartbeat refreshes session last activity", %{token: token} do
+    assert {:ok, session} = Ingest.authorize_rtmp(token, "connection-hb")
+
+    stale = DateTime.add(DateTime.utc_now(), -600, :second)
+
+    Repo.update_all(from(s in StreamSession, where: s.id == ^session.id),
+      set: [last_activity_at: stale]
+    )
+
+    assert :ok = Ingest.heartbeat(session.id)
+    assert {:error, :not_found} = Ingest.heartbeat(999_999)
+
+    # After a heartbeat the session is no longer stale.
+    assert 0 = Ingest.reconcile_stale_sessions(300)
+  end
+
+  test "reconcile_stale_sessions ends only sessions stale past the threshold", %{
+    stream: stream,
+    token: token
+  } do
+    assert {:ok, session} = Ingest.authorize_rtmp(token, "connection-stale")
+
+    # A fresh session is not stale.
+    assert 0 = Ingest.reconcile_stale_sessions(300)
+    assert %{status: "live"} = Streams.get_stream(stream.id)
+
+    stale = DateTime.add(DateTime.utc_now(), -600, :second)
+
+    Repo.update_all(from(s in StreamSession, where: s.id == ^session.id),
+      set: [last_activity_at: stale]
+    )
+
+    assert 1 = Ingest.reconcile_stale_sessions(300)
+    assert %{status: "offline"} = Streams.get_stream(stream.id)
+  end
+
+  test "update_stream_with_history records changes and emits stream.updated while live", %{
+    stream: stream,
+    token: token
+  } do
+    previous_url = Application.get_env(:zer0_stream, :lifecycle_webhook_url)
+    previous_secret = Application.get_env(:zer0_stream, :lifecycle_webhook_secret)
+    Application.put_env(:zer0_stream, :lifecycle_webhook_url, "https://zer0.tv/api/stream-events")
+    Application.put_env(:zer0_stream, :lifecycle_webhook_secret, "webhook-secret")
+
+    on_exit(fn ->
+      restore_config(:lifecycle_webhook_url, previous_url)
+      restore_config(:lifecycle_webhook_secret, previous_secret)
+    end)
+
+    assert {:ok, _session} = Ingest.authorize_rtmp(token, "connection-update")
+
+    {:ok, updated} =
+      Streams.update_stream_with_history(Streams.get_stream(stream.id), %{
+        "title" => "New Title",
+        "category_name" => "RPG",
+        "category_twitch_id" => "123"
+      })
+
+    assert updated.title == "New Title"
+
+    assert %StreamUpdate{} =
+             Repo.one!(from(u in StreamUpdate, where: u.stream_id == ^stream.id))
+
+    assert %WebhookDelivery{event_type: "stream.updated"} =
+             Repo.one!(
+               from(d in WebhookDelivery, where: d.event_type == "stream.updated")
+             )
+  end
+
+  test "update_stream_with_history records changes and emits stream.updated while offline", %{
+    stream: stream
+  } do
+    previous_url = Application.get_env(:zer0_stream, :lifecycle_webhook_url)
+    previous_secret = Application.get_env(:zer0_stream, :lifecycle_webhook_secret)
+    Application.put_env(:zer0_stream, :lifecycle_webhook_url, "https://zer0.tv/api/stream-events")
+    Application.put_env(:zer0_stream, :lifecycle_webhook_secret, "webhook-secret")
+
+    on_exit(fn ->
+      restore_config(:lifecycle_webhook_url, previous_url)
+      restore_config(:lifecycle_webhook_secret, previous_secret)
+    end)
+
+    # No live session — the update should still record history and emit a webhook
+    # so the frontend mirror stays in sync even when the stream is offline.
+    {:ok, updated} =
+      Streams.update_stream_with_history(stream, %{
+        "title" => "Offline Title",
+        "category_name" => "Puzzle",
+        "category_twitch_id" => "456"
+      })
+
+    assert updated.title == "Offline Title"
+
+    assert %StreamUpdate{session_id: nil} =
+             Repo.one!(from(u in StreamUpdate, where: u.stream_id == ^stream.id))
+
+    assert %WebhookDelivery{event_type: "stream.updated"} =
+             Repo.one!(
+               from(d in WebhookDelivery, where: d.event_type == "stream.updated")
+             )
   end
 
   test "reconciliation enqueues a stopped event", %{token: token} do

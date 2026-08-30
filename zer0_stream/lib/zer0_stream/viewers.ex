@@ -12,12 +12,18 @@ defmodule Zer0Stream.Viewers do
         {:error, :not_found}
 
       session ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        session
+        |> Ecto.Changeset.change(last_activity_at: now)
+        |> Repo.update!()
+
         %ViewerSample{}
         |> ViewerSample.changeset(%{
           stream_id: session.stream_id,
           stream_session_id: session.id,
           viewer_count: viewer_count,
-          sampled_at: DateTime.utc_now() |> DateTime.truncate(:second)
+          sampled_at: now |> DateTime.truncate(:second)
         })
         |> Repo.insert()
     end

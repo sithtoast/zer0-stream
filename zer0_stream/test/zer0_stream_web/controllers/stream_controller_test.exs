@@ -155,6 +155,43 @@ defmodule Zer0StreamWeb.StreamControllerTest do
     assert stream_id == stream.id
   end
 
+  test "returns title/category update history for a stream", %{conn: conn} do
+    {:ok, creator} = Streams.create_creator(%{external_id: "creator-updates"})
+    {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Update Test"})
+    {:ok, %{token: token}} = Streams.rotate_creator_stream_key(creator)
+    {:ok, _session} = Zer0Stream.Ingest.authorize_rtmp(token, "updates-connection")
+
+    {:ok, _updated} =
+      Streams.update_stream_with_history(stream, %{
+        "title" => "New Title",
+        "category_name" => "RPG",
+        "category_twitch_id" => "123"
+      })
+
+    path = "/api/streams/#{stream.id}/updates"
+
+    conn =
+      conn
+      |> service_conn(:get, path, %{})
+      |> get(path)
+
+    assert %{"stream_id" => stream_id, "updates" => [update]} = json_response(conn, 200)
+    assert stream_id == stream.id
+    assert update["title"] == "New Title"
+    assert update["category_name"] == "RPG"
+    assert update["category_twitch_id"] == "123"
+    assert update["session_id"] != nil
+  end
+
+  test "returns not found for updates on a missing stream", %{conn: conn} do
+    conn =
+      conn
+      |> service_conn(:get, "/api/streams/999999/updates", %{})
+      |> get("/api/streams/999999/updates")
+
+    assert response(conn, 404) == ""
+  end
+
   test "rejects playback token issuance without main-app authentication", %{conn: conn} do
     conn = get(conn, "/api/streams/1/playback")
 

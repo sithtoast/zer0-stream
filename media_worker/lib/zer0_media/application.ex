@@ -14,6 +14,8 @@ defmodule Zer0Media.Application do
       Zer0Media.HLSCleanup,
       Zer0Media.ViewerTracker,
       Zer0Media.ViewerMetricsReporter,
+      Zer0Media.SessionTracker,
+      Zer0Media.SessionHeartbeatReporter,
       {Bandit, plug: Zer0Media.HLSRouter, port: http_port(), scheme: :http}
     ]
 

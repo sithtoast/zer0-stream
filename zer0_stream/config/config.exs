@@ -9,7 +9,11 @@ import Config
 
 config :zer0_stream,
   generators: [timestamp_type: :utc_datetime],
-  ecto_repos: [Zer0Stream.Repo]
+  ecto_repos: [Zer0Stream.Repo],
+  # How often the SessionReconciler sweeps for stale live sessions (ms).
+  session_reconcile_interval_ms: 60_000,
+  # A live session is considered stale after this many seconds without activity.
+  stream_stale_after_seconds: 300
 
 # Configures the endpoint
 config :zer0_stream, Zer0StreamWeb.Endpoint,

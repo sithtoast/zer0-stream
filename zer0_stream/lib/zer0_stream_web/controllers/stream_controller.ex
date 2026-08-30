@@ -83,6 +83,19 @@ defmodule Zer0StreamWeb.StreamController do
     end
   end
 
+  def updates(conn, %{"id" => id} = params) do
+    limit = params |> Map.get("limit", "50") |> parse_limit()
+
+    case Streams.get_stream(id) do
+      nil ->
+        send_resp(conn, :not_found, "")
+
+      stream ->
+        updates = Streams.list_stream_updates(stream.id, limit)
+        json(conn, %{stream_id: stream.id, updates: Enum.map(updates, &stream_update_json/1)})
+    end
+  end
+
   def viewer_metrics(conn, %{"id" => id} = params) do
     limit = params |> Map.get("limit", "100") |> parse_limit()
 
@@ -153,7 +166,9 @@ defmodule Zer0StreamWeb.StreamController do
         send_resp(conn, :not_found, "")
 
       stream ->
-        case Streams.update_stream(stream, Map.take(params, ["title", "category_name", "category_twitch_id"])) do
+        attrs = Map.take(params, ["title", "category_name", "category_twitch_id"])
+
+        case Streams.update_stream_with_history(stream, attrs) do
           {:ok, stream} -> json(conn, %{stream: stream_json(stream)})
           {:error, changeset} -> validation_error(conn, changeset)
         end
@@ -204,6 +219,18 @@ defmodule Zer0StreamWeb.StreamController do
       viewer_count: sample.viewer_count,
       sampled_at: sample.sampled_at,
       stream_session_id: sample.stream_session_id
+    }
+  end
+
+  defp stream_update_json(update) do
+    %{
+      id: update.id,
+      stream_id: update.stream_id,
+      session_id: update.session_id,
+      title: update.title,
+      category_name: update.category_name,
+      category_twitch_id: update.category_twitch_id,
+      changed_at: update.changed_at
     }
   end
 

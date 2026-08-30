@@ -27,6 +27,10 @@ defmodule Zer0Media.ControlPlane do
     })
   end
 
+  def heartbeat(session_id) do
+    request(:post, "/api/ingest/sessions/#{session_id}/heartbeat", %{})
+  end
+
   defp request(method, path, payload) do
     url = Application.get_env(:zer0_media, :control_plane_url, "http://localhost:4000") <> path
     {timestamp, signature} = Zer0Media.ControlPlaneAuth.sign(method, path, payload)

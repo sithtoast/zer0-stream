@@ -3,7 +3,7 @@ defmodule Zer0Stream.Streams do
 
   alias Zer0Stream.Repo
   alias Zer0Stream.{IdempotencyRecord, Repo}
-  alias Zer0Stream.Streams.{Creator, Stream, StreamKey, StreamSession}
+  alias Zer0Stream.Streams.{Creator, Stream, StreamKey, StreamSession, StreamUpdate}
 
   def create_creator(attrs) do
     case Map.get(attrs, :external_id) do
@@ -84,6 +84,74 @@ defmodule Zer0Stream.Streams do
     |> Repo.update()
   end
 
+  @doc """
+  Updates a stream's title/category and, when a live session exists, records the
+  change in `stream_updates` and emits a `stream.updated` lifecycle webhook.
+  Returns `{:ok, stream}` / `{:error, changeset}`.
+  """
+  def update_stream_with_history(%Stream{} = stream, attrs) do
+    result =
+      Repo.transaction(fn ->
+        with {:ok, updated} <- update_stream(stream, attrs) do
+          record_stream_update(updated)
+          {:ok, updated}
+        else
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    case result do
+      {:ok, {:ok, updated}} -> {:ok, updated}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp record_stream_update(%Stream{} = stream) do
+    session = get_live_session(stream.id)
+
+    %StreamUpdate{}
+    |> StreamUpdate.changeset(%{
+      stream_id: stream.id,
+      session_id: session && session.id,
+      title: stream.title,
+      category_name: stream.category_name,
+      category_twitch_id: stream.category_twitch_id,
+      changed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+    |> Repo.insert!()
+
+    :ok =
+      Zer0Stream.LifecycleWebhook.enqueue(
+        "stream.updated",
+        stream_update_event_data(stream, session)
+      )
+
+    :ok
+  end
+
+  defp stream_update_event_data(stream, session) do
+    %{
+      stream: %{
+        id: stream.id,
+        creator_id: stream.creator_id,
+        title: stream.title,
+        category_name: stream.category_name,
+        category_twitch_id: stream.category_twitch_id,
+        status: stream.status
+      },
+      session:
+        session &&
+          %{
+            id: session.id,
+            connection_id: session.connection_id,
+            protocol: session.protocol,
+            status: session.status,
+            started_at: session.started_at,
+            ended_at: session.ended_at
+          }
+    }
+  end
+
   def get_stream_for_creator(creator_id), do: Repo.get_by(Stream, creator_id: creator_id)
 
   def list_streams do
@@ -100,6 +168,20 @@ defmodule Zer0Stream.Streams do
       )
     )
   end
+
+  def list_stream_updates(stream_id, limit \\ 50) do
+    Repo.all(
+      from(update in StreamUpdate,
+        where: update.stream_id == ^stream_id,
+        order_by: [desc: update.changed_at],
+        limit: ^normalize_limit(limit),
+        preload: [:session]
+      )
+    )
+  end
+
+  defp normalize_limit(limit) when is_integer(limit), do: min(max(limit, 1), 1_000)
+  defp normalize_limit(_limit), do: 50
 
   def rotate_creator_stream_key(%Creator{id: creator_id}) do
     token = generate_token()

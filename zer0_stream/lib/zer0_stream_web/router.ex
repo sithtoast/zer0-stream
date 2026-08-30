@@ -36,6 +36,7 @@ defmodule Zer0StreamWeb.Router do
     get "/:id/playback", StreamController, :playback
     get "/:id/viewers", StreamController, :viewers
     get "/:id/viewer-metrics", StreamController, :viewer_metrics
+    get "/:id/updates", StreamController, :updates
   end
 
   scope "/api/control", Zer0StreamWeb do
@@ -54,6 +55,7 @@ defmodule Zer0StreamWeb.Router do
     post "/rtmp/:connection_id/stop", IngestController, :stop
     post "/rtmp/reconcile", IngestController, :reconcile
     post "/sessions/:session_id/viewer-samples", IngestController, :viewer_sample
+    post "/sessions/:session_id/heartbeat", IngestController, :heartbeat
     put "/sessions/:session_id/webrtc", IngestController, :register_webrtc
   end
 
