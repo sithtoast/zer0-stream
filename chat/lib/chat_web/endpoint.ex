@@ -13,17 +13,7 @@ defmodule ChatWeb.Endpoint do
 
   socket "/socket", ChatWeb.UserSocket,
     websocket: true,
-    longpoll: false,
-    check_origin: allowed_origins()
-
-  # Origins allowed to open WebSocket connections to this socket.
-  # Configure via CHAT_ALLOWED_ORIGINS (comma-separated), e.g.
-  # "https://dev.zer0.tv,https://zer0.tv".
-  defp allowed_origins do
-    System.get_env("CHAT_ALLOWED_ORIGINS", "http://localhost:4000")
-    |> String.split(",", trim: true)
-    |> Enum.map(&String.trim/1)
-  end
+    longpoll: false
 
   # Serve at "/" the static files from "priv/static" directory.
   #

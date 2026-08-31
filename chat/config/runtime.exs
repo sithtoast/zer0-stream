@@ -31,5 +31,10 @@ if config_env() == :prod do
   config :chat, ChatWeb.Endpoint,
     url: [host: System.get_env("PHX_HOST", "example.com"), port: 443, scheme: "https"],
     http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}],
-    secret_key_base: secret_key_base
+    secret_key_base: secret_key_base,
+    # Origins allowed to open WebSocket connections (comma-separated env).
+    check_origin:
+      System.get_env("CHAT_ALLOWED_ORIGINS", "http://localhost:4000")
+      |> String.split(",", trim: true)
+      |> Enum.map(&String.trim/1)
 end
