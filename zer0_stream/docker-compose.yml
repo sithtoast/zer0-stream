@@ -35,6 +35,7 @@ services:
       SECRET_KEY_BASE: changeme-chat
       DATABASE_URL: ${CHAT_DATABASE_URL:?CHAT_DATABASE_URL is required}
       CHAT_TOKEN_SECRET: ${CHAT_TOKEN_SECRET:-dev-chat-token-secret}
+      CHAT_ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-http://localhost:4000}
     restart: unless-stopped
 
   media_worker:

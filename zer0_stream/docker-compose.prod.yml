@@ -37,6 +37,7 @@ services:
       SECRET_KEY_BASE: ${CHAT_SECRET_KEY_BASE:?CHAT_SECRET_KEY_BASE is required}
       PHX_HOST: ${CHAT_PHX_HOST:?CHAT_PHX_HOST is required}
       CHAT_TOKEN_SECRET: ${CHAT_TOKEN_SECRET:?CHAT_TOKEN_SECRET is required}
+      CHAT_ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-https://zer0.tv,https://www.zer0.tv}
       PORT: 4100
       AUTO_MIGRATE: ${CHAT_AUTO_MIGRATE:-false}
     healthcheck:
