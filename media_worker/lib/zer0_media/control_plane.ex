@@ -32,7 +32,7 @@ defmodule Zer0Media.ControlPlane do
   end
 
   defp request(method, path, payload) do
-    url = Application.get_env(:zer0_media, :control_plane_url, "http://localhost:4000") <> path
+    url = control_plane_url() <> path
     {timestamp, signature} = Zer0Media.ControlPlaneAuth.sign(method, path, payload)
 
     case Req.request(
@@ -48,5 +48,12 @@ defmodule Zer0Media.ControlPlane do
       {:ok, %{status: status}} -> {:error, {:control_plane, status}}
       {:error, reason} -> {:error, {:control_plane, reason}}
     end
+  end
+
+  # Prefer the app config (set via CLI/dev task), otherwise read the
+  # CONTROL_PLANE_URL env var, falling back to the local default.
+  defp control_plane_url do
+    Application.get_env(:zer0_media, :control_plane_url) ||
+      System.get_env("CONTROL_PLANE_URL", "http://localhost:4000")
   end
 end
