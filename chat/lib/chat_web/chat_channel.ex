@@ -8,15 +8,19 @@ defmodule ChatWeb.ChatChannel do
   @rate_limit_window_ms 10_000
 
   @impl true
-  def join("chat:" <> channel_id, _params, socket) when channel_id != "" do
+  def join("chat:" <> channel_id, params, socket) when channel_id != "" do
+    # The broadcaster's Twitch user id is passed by the frontend on join so we
+    # can label that sender's messages with a broadcaster badge.
+    broadcaster_id = params["broadcaster_id"]
     messages = Messages.recent(channel_id)
 
     socket =
       socket
       |> assign(:channel_id, channel_id)
+      |> assign(:broadcaster_id, broadcaster_id)
       |> assign(:message_timestamps, [])
 
-    {:ok, %{messages: Enum.map(messages, &message_payload/1)}, socket}
+    {:ok, %{messages: Enum.map(messages, &message_payload(&1, broadcaster_id))}, socket}
   end
 
   def join(_topic, _params, _socket), do: {:error, %{reason: "invalid_channel"}}
@@ -47,9 +51,10 @@ defmodule ChatWeb.ChatChannel do
 
             case Messages.create_message(attrs) do
               {:ok, message} ->
-                broadcast!(socket, "message", message_payload(message))
+                payload = message_payload(message, socket.assigns.broadcaster_id)
+                broadcast!(socket, "message", payload)
                 # Acknowledge the sender so the client doesn't hit its push timeout.
-                {:reply, {:ok, message_payload(message)}, socket}
+                {:reply, {:ok, payload}, socket}
 
               {:error, _changeset} ->
                 {:reply, {:error, %{reason: "message_not_saved"}}, socket}
@@ -76,12 +81,13 @@ defmodule ChatWeb.ChatChannel do
     end
   end
 
-  defp message_payload(message) do
+  defp message_payload(message, broadcaster_id) do
     %{
       id: message.id,
       body: message.body,
       channel_id: message.channel_id,
       first_message: message.first_message,
+      is_broadcaster: message.sender_id == broadcaster_id,
       sender: %{
         id: message.sender_id,
         display_name: message.sender_display_name
