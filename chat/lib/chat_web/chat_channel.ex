@@ -48,7 +48,8 @@ defmodule ChatWeb.ChatChannel do
             case Messages.create_message(attrs) do
               {:ok, message} ->
                 broadcast!(socket, "message", message_payload(message))
-                {:noreply, socket}
+                # Acknowledge the sender so the client doesn't hit its push timeout.
+                {:reply, {:ok, message_payload(message)}, socket}
 
               {:error, _changeset} ->
                 {:reply, {:error, %{reason: "message_not_saved"}}, socket}

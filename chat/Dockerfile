@@ -30,6 +30,11 @@ COPY --from=builder /root/.hex /app/.hex
 
 ENV MIX_ENV=prod MIX_HOME=/app/.mix HEX_HOME=/app/.hex
 
+# Entrypoint runs migrations on startup when AUTO_MIGRATE=true.
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 EXPOSE 4100
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["mix", "phx.server"]
