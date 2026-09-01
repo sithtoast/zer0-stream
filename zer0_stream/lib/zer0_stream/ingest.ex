@@ -136,7 +136,13 @@ defmodule Zer0Stream.Ingest do
           last_activity_at: DateTime.utc_now() |> DateTime.truncate(:second)
         }
 
-        attrs = if is_nil(ice_servers), do: attrs, else: Map.put(attrs, :webrtc_ice_servers, ice_servers)
+        # The column is jsonb (:map); wrap the list in a map so Ecto accepts it.
+        attrs =
+          if is_nil(ice_servers) do
+            attrs
+          else
+            Map.put(attrs, :webrtc_ice_servers, %{"servers" => ice_servers})
+          end
 
         {:ok,
          session

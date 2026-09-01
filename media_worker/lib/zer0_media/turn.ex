@@ -12,7 +12,12 @@ defmodule Zer0Media.TURN do
 
   All values come from environment variables:
 
-  - `TURN_URL` — e.g. `turn:turn.example.com:3478?transport=udp`
+  - `TURN_URL` — TURN server used by the WebRTC sink (server side). If the media
+    worker is on the same LAN as the TURN server, point this at the LAN address
+    (e.g. `turn:192.168.1.1:3478?transport=udp`) to avoid NAT reflection.
+  - `TURN_PUBLIC_URL` — TURN server handed to the browser (must be a public,
+    reachable address, e.g. `turn:199....:3478?transport=udp`). Defaults to
+    `TURN_URL` if not set.
   - `TURN_SECRET` — shared secret for ephemeral credentials
   - `TURN_USERNAME` / `TURN_PASSWORD` — static credentials (when no secret)
   - `STUN_URL` — optional override of the default STUN server
@@ -22,25 +27,26 @@ defmodule Zer0Media.TURN do
 
   @doc "Returns the ICE servers list for the WebRTC sink (server side)."
   def ice_servers do
-    [stun_server() | turn_servers()]
+    [stun_server() | turn_servers(System.get_env("TURN_URL"))]
   end
 
-  @doc "Returns the ICE servers to hand to the browser (same list)."
-  def browser_ice_servers, do: ice_servers()
+  @doc "Returns the ICE servers to hand to the browser (public URL)."
+  def browser_ice_servers do
+    [
+      stun_server()
+      | turn_servers(System.get_env("TURN_PUBLIC_URL") || System.get_env("TURN_URL"))
+    ]
+  end
 
   defp stun_server do
     %{urls: System.get_env("STUN_URL", @default_stun)}
   end
 
-  defp turn_servers do
-    case System.get_env("TURN_URL") do
-      nil ->
-        []
+  defp turn_servers(nil), do: []
 
-      url ->
-        {username, credential} = credentials()
-        [%{urls: url, username: username, credential: credential}]
-    end
+  defp turn_servers(url) do
+    {username, credential} = credentials()
+    [%{urls: url, username: username, credential: credential}]
   end
 
   defp credentials do
@@ -52,10 +58,12 @@ defmodule Zer0Media.TURN do
         username = "#{expiry_unix()}:#{user_id()}"
         credential = :crypto.mac(:hmac, :sha, secret, username) |> Base.encode64()
         {username, credential}
+   
     end
   end
 
   defp expiry_unix do
+
     System.system_time(:second) + 3600
   end
 
@@ -63,3 +71,4 @@ defmodule Zer0Media.TURN do
     "zer0"
   end
 end
+

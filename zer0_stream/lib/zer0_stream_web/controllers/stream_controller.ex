@@ -62,7 +62,8 @@ defmodule Zer0StreamWeb.StreamController do
   end
 
   defp maybe_put_ice_servers(resp, nil), do: resp
-  defp maybe_put_ice_servers(resp, ice_servers), do: Map.put(resp, :webrtc_ice_servers, ice_servers)
+  defp maybe_put_ice_servers(resp, %{"servers" => servers}), do: Map.put(resp, :webrtc_ice_servers, servers)
+  defp maybe_put_ice_servers(resp, _), do: resp
 
   def viewers(conn, %{"id" => id}) do
     case Streams.get_stream(id) do
