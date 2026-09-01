@@ -67,6 +67,11 @@ defmodule Zer0Media.RTMPServer do
   end
 
   defp start_live_pipeline(client_ref, session_id) do
+    # Normalize to a string: session_id comes from the control plane as an
+    # integer, but it is used as a string in the signaling URL and as the
+    # WebRTC signaling registry key (matched against the /webrtc/:session_id
+    # route, which is always a string).
+    session_id = to_string(session_id)
     output_dir = hls_output_dir(session_id)
 
     case Membrane.Pipeline.start_link(Zer0Media.LivePipeline,
@@ -103,6 +108,8 @@ defmodule Zer0Media.RTMPServer do
   # placeholder, e.g.
   #   wss://stream.dev.zer0.tv/webrtc/:session_id
   defp signaling_url(session_id) do
+    session_id = to_string(session_id)
+
     case System.get_env("WEBRTC_PUBLIC_URL_TEMPLATE") do
       nil -> "ws://localhost:8080/webrtc/#{session_id}"
       template -> String.replace(template, ":session_id", session_id)
