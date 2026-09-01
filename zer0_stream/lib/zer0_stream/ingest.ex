@@ -125,18 +125,22 @@ defmodule Zer0Stream.Ingest do
     end
   end
 
-  def register_webrtc(session_id, webrtc_url) do
+  def register_webrtc(session_id, webrtc_url, ice_servers \\ nil) do
     case Repo.get(StreamSession, session_id) do
       nil ->
         {:error, :not_found}
 
       session ->
+        attrs = %{
+          webrtc_url: webrtc_url,
+          last_activity_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        }
+
+        attrs = if is_nil(ice_servers), do: attrs, else: Map.put(attrs, :webrtc_ice_servers, ice_servers)
+
         {:ok,
          session
-         |> Ecto.Changeset.change(
-           webrtc_url: webrtc_url,
-           last_activity_at: DateTime.utc_now() |> DateTime.truncate(:second)
-         )
+         |> Ecto.Changeset.change(attrs)
          |> Repo.update!()}
     end
   end

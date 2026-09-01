@@ -67,27 +67,25 @@ defmodule Zer0Media.RTMPServer do
   end
 
   defp start_live_pipeline(client_ref, session_id) do
-    webrtc_port = free_port()
     output_dir = hls_output_dir(session_id)
 
     case Membrane.Pipeline.start_link(Zer0Media.LivePipeline,
            client_ref: client_ref,
            output_dir: output_dir,
-           webrtc_port: webrtc_port,
            session_id: session_id,
            parent: self()
          ) do
       {:ok, _supervisor, pipeline} ->
-        signaling_url = "ws://localhost:#{webrtc_port}"
+        signaling_url = signaling_url(session_id)
 
         Logger.info(
           "Live pipeline session #{session_id} ready; " <>
             "WebRTC signaling at #{signaling_url}"
         )
 
-        ControlPlane.report_webrtc(session_id, signaling_url)
+        ControlPlane.report_webrtc(session_id, signaling_url, Zer0Media.TURN.browser_ice_servers())
 
-        {pipeline, webrtc_port}
+        {pipeline, nil}
 
       {:error, reason} ->
         Logger.error("Unable to start live pipeline: #{inspect(reason)}")
@@ -95,11 +93,20 @@ defmodule Zer0Media.RTMPServer do
     end
   end
 
-  defp free_port do
-    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
-    {:ok, {_address, port}} = :inet.sockname(socket)
-    :gen_tcp.close(socket)
-    port
+  # The signaling URL reported to the control plane (and served to the browser).
+  # WebRTC signaling is served on the shared origin (same port as HLS), so the
+  # URL is just the public origin + /webrtc/<session_id>.
+  #
+  # Defaults to a localhost URL for local testing. For internet-facing deployments
+  # set WEBRTC_PUBLIC_URL_TEMPLATE to the public origin (proxied through
+  # Caddy/OPNsense to the media worker's HTTP port), with a ":session_id"
+  # placeholder, e.g.
+  #   wss://stream.dev.zer0.tv/webrtc/:session_id
+  defp signaling_url(session_id) do
+    case System.get_env("WEBRTC_PUBLIC_URL_TEMPLATE") do
+      nil -> "ws://localhost:8080/webrtc/#{session_id}"
+      template -> String.replace(template, ":session_id", session_id)
+    end
   end
 
   defp live_pipeline_mode? do

@@ -13,8 +13,9 @@ Key POC findings:
   happens when the sink transcodes H.264 -> VP8. The RTMP input is already
   H.264, so passing it through is both stable and cheap.
 - The WebRTC Sink sends the SDP offer; the browser answers it.
-- The signaling port is dynamic per session (like the RTMP relay port) to avoid
-  collisions across OBS reconnects.
+- Signaling is served on the **shared HTTP origin** (`HLSRouter` on port 8080)
+  at `/webrtc/<session_id>`, so it flows through the existing
+  `stream.dev.zer0.tv` reverse proxy with no extra Caddy route or dynamic port.
 - A one-time ICE connectivity-check timeout can occur on the first connect
   (mostly IPv6 candidate noise / mDNS `.local` timeouts); a retry connects
   cleanly.
@@ -51,11 +52,11 @@ OBS --RTMP--> media_worker (Membrane pipeline)
 | Concern | POC | Production |
 |---|---|---|
 | Outputs | WebRTC replaces HLS for the session | HLS + WebRTC simultaneously (tee) |
-| Signaling port | Dynamic, read from the log | Discovered via control plane / registry |
+| Signaling | Per-session WebSocket port | Shared origin `/webrtc/<session_id>`, URL via control plane |
 | Auth | None | Signed WebRTC playback token |
 | Player | Standalone test page | Integrated into channel page + HLS fallback |
 | Packaging | Patched vendored Boombox (gitignored) | Tracked pipeline or Boombox fork |
-| ICE | Default STUN, IPv6 noise | Filter IPv6, configurable STUN/TURN |
+| ICE | Default STUN, IPv6 noise | Filter IPv6, STUN/TURN configurable via env (`TURN_URL`/`TURN_SECRET`) |
 
 ## Production steps
 
@@ -94,6 +95,11 @@ OBS --RTMP--> media_worker (Membrane pipeline)
    candidates (keeps loopback for local testing), reducing first-connect
    connectivity-check timeouts. STUN/TURN configurability and client-side
    candidate handling (mDNS `.local` timeouts) still pending in the frontend.
+
+   **Internet-facing media reachability is still open.** Signaling now works
+   through the shared origin, but the RTP/DTLS media path (ephemeral UDP ports,
+   STUN-only) still needs to be exposed for remote viewers — either a fixed ICE
+   port range forwarded through OPNsense, or a TURN relay.
 6. **Ops polish** — quiet the RTMP relay teardown errors on reconnect.
 
 ## Open questions
@@ -102,3 +108,9 @@ OBS --RTMP--> media_worker (Membrane pipeline)
 - Whether to keep HLS as the primary path with WebRTC as an enhancement, or vice
   versa.
 - STUN/TURN deployment for non-local viewers behind restrictive NATs.
+
+  **Status: implemented in code.** The media worker builds STUN + TURN ICE
+  servers from env (`TURN_URL`, `TURN_SECRET` for coturn `use-auth-secret`
+  credentials, or static `TURN_USERNAME`/`TURN_PASSWORD`), and shares them with
+  the browser via the control plane playback response. Remaining is deploying
+  coturn and opening the TURN ports on OPNsense.

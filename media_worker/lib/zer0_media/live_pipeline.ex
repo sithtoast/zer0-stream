@@ -23,7 +23,6 @@ defmodule Zer0Media.LivePipeline do
   def handle_init(_ctx, opts) do
     client_ref = Keyword.fetch!(opts, :client_ref)
     output_dir = Keyword.fetch!(opts, :output_dir)
-    webrtc_port = Keyword.fetch!(opts, :webrtc_port)
     session_id = Keyword.get(opts, :session_id)
 
     source = Keyword.get(opts, :source, %RTMP.SourceBin{client_ref: client_ref})
@@ -68,7 +67,7 @@ defmodule Zer0Media.LivePipeline do
       }),
 
       {child(:webrtc, %Zer0Media.WebRTCBin{
-         signaling: {:websocket, [port: webrtc_port]},
+         session_id: session_id,
          video_codec: [:h264],
          ice_ip_filter: &__MODULE__.ice_ip_filter/1
        }), group: :webrtc_output, crash_group_mode: :temporary}
@@ -78,7 +77,6 @@ defmodule Zer0Media.LivePipeline do
      %{
        parent: opts[:parent],
        output_dir: output_dir,
-       webrtc_port: webrtc_port,
        session_id: session_id,
        webrtc_viewer_id: nil,
        webrtc_heartbeat_timer: nil,
@@ -216,7 +214,7 @@ defmodule Zer0Media.LivePipeline do
 
     spec =
       {child(:webrtc, %Zer0Media.WebRTCBin{
-         signaling: {:websocket, [port: state.webrtc_port]},
+         session_id: state.session_id,
          video_codec: [:h264],
          ice_ip_filter: &__MODULE__.ice_ip_filter/1
        }), group: :webrtc_output, crash_group_mode: :temporary}

@@ -10,6 +10,7 @@ defmodule Zer0Stream.Streams.StreamSession do
     field(:ended_at, :utc_datetime)
     field(:last_activity_at, :utc_datetime)
     field(:webrtc_url, :string)
+    field(:webrtc_ice_servers, :map)
 
     belongs_to(:stream, Zer0Stream.Streams.Stream)
     belongs_to(:stream_key, Zer0Stream.Streams.StreamKey)
@@ -26,7 +27,8 @@ defmodule Zer0Stream.Streams.StreamSession do
       :last_activity_at,
       :stream_id,
       :stream_key_id,
-      :webrtc_url
+      :webrtc_url,
+      :webrtc_ice_servers
     ])
     |> validate_required([:connection_id, :protocol, :status, :stream_id, :stream_key_id])
     |> validate_inclusion(:protocol, ["rtmp"])

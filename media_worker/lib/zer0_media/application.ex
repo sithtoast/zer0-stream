@@ -16,6 +16,7 @@ defmodule Zer0Media.Application do
       Zer0Media.ViewerMetricsReporter,
       Zer0Media.SessionTracker,
       Zer0Media.SessionHeartbeatReporter,
+      Zer0Media.WebRTCSignalingRegistry,
       {Bandit, plug: Zer0Media.HLSRouter, port: http_port(), scheme: :http}
     ]
 

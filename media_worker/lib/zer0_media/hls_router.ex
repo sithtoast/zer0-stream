@@ -56,6 +56,23 @@ defmodule Zer0Media.HLSRouter do
     serve_file(conn, path, boombox_hls_dir(), true)
   end
 
+  # WebRTC signaling WebSocket, served on the shared origin (same port as HLS)
+  # so it is reachable through the existing `stream.dev.zer0.tv` reverse proxy.
+  get "/webrtc/:session_id" do
+  	case Zer0Media.WebRTCSignalingRegistry.lookup(session_id) do
+  		nil ->
+  			send_resp(conn, 404, "not found")
+
+  		signaling ->
+  			WebSockAdapter.upgrade(
+  				conn,
+  				Zer0Media.WebRTCSignalingWebSock,
+  				%{signaling: signaling},
+  				[]
+  			)
+  	end
+  end
+
   match _ do
     send_resp(conn, 404, "not found")
   end

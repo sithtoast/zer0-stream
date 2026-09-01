@@ -14,10 +14,11 @@ defmodule Zer0Media.ControlPlane do
     request(:post, "/api/ingest/rtmp/reconcile", %{})
   end
 
-  def report_webrtc(session_id, webrtc_url) do
+  def report_webrtc(session_id, webrtc_url, ice_servers \\ []) do
     request(:put, "/api/ingest/sessions/#{session_id}/webrtc", %{
       session_id: session_id,
-      webrtc_url: webrtc_url
+      webrtc_url: webrtc_url,
+      webrtc_ice_servers: ice_servers
     })
   end
 

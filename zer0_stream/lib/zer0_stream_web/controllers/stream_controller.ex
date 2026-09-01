@@ -50,7 +50,9 @@ defmodule Zer0StreamWeb.StreamController do
 
         resp =
           if session.webrtc_url do
-            Map.put(resp, :webrtc_url, session.webrtc_url)
+            resp
+            |> Map.put(:webrtc_url, session.webrtc_url)
+            |> maybe_put_ice_servers(session.webrtc_ice_servers)
           else
             resp
           end
@@ -58,6 +60,9 @@ defmodule Zer0StreamWeb.StreamController do
         json(conn, resp)
     end
   end
+
+  defp maybe_put_ice_servers(resp, nil), do: resp
+  defp maybe_put_ice_servers(resp, ice_servers), do: Map.put(resp, :webrtc_ice_servers, ice_servers)
 
   def viewers(conn, %{"id" => id}) do
     case Streams.get_stream(id) do

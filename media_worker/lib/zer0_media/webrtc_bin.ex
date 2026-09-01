@@ -27,7 +27,7 @@ defmodule Zer0Media.WebRTCBin do
       ]
     ]
 
-  def_options signaling: [],
+  def_options session_id: [],
               video_codec: [],
               ice_ip_filter: [default: &__MODULE__.default_ice_ip_filter/1]
 
@@ -36,17 +36,30 @@ defmodule Zer0Media.WebRTCBin do
 
   @impl true
   def handle_init(_ctx, opts) do
+    # Create the signaling relay and register it so the shared origin
+    # (HLSRouter at /webrtc/<session_id>) can route a viewer's WebSocket here.
+    # `Signaling.new/0` links the relay to this bin, so it is cleaned up when
+    # the bin terminates.
+    signaling = Membrane.WebRTC.Signaling.new()
+    Zer0Media.WebRTCSignalingRegistry.register(opts.session_id, signaling)
+
     spec =
       child(:webrtc, %ExWebRTCSink{
-        signaling: opts.signaling,
+        signaling: signaling,
         tracks: [],
         video_codec: opts.video_codec,
-        ice_servers: [%{urls: "stun:stun.l.google.com:19302"}],
+        ice_servers: Zer0Media.TURN.ice_servers(),
         ice_port_range: [0],
         ice_ip_filter: opts.ice_ip_filter
       })
 
-    {[spec: spec], %{video_codec: opts.video_codec}}
+    {[spec: spec], %{video_codec: opts.video_codec, session_id: opts.session_id}}
+  end
+
+  @impl true
+  def handle_terminate_request(_ctx, state) do
+    Zer0Media.WebRTCSignalingRegistry.unregister(state.session_id)
+    {[terminate: :normal], state}
   end
 
   @impl true

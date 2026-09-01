@@ -77,8 +77,10 @@ defmodule Zer0StreamWeb.IngestController do
     |> json(%{error: "viewer_count is required"})
   end
 
-  def register_webrtc(conn, %{"session_id" => session_id, "webrtc_url" => webrtc_url}) do
-    case Zer0Stream.Ingest.register_webrtc(session_id, webrtc_url) do
+  def register_webrtc(conn, %{"session_id" => session_id, "webrtc_url" => webrtc_url} = params) do
+    ice_servers = Map.get(params, "webrtc_ice_servers")
+
+    case Zer0Stream.Ingest.register_webrtc(session_id, webrtc_url, ice_servers) do
       {:ok, _session} -> json(conn, %{ok: true})
       {:error, :not_found} -> send_resp(conn, :not_found, "")
     end
