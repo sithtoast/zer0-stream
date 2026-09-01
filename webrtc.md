@@ -109,8 +109,19 @@ OBS --RTMP--> media_worker (Membrane pipeline)
   versa.
 - STUN/TURN deployment for non-local viewers behind restrictive NATs.
 
-  **Status: implemented in code.** The media worker builds STUN + TURN ICE
-  servers from env (`TURN_URL`, `TURN_SECRET` for coturn `use-auth-secret`
-  credentials, or static `TURN_USERNAME`/`TURN_PASSWORD`), and shares them with
-  the browser via the control plane playback response. Remaining is deploying
-  coturn and opening the TURN ports on OPNsense.
+  **Status: implemented and validated.** The media worker builds STUN + TURN
+  ICE servers from env and shares them with the browser via the control plane
+  playback response. coturn runs on the OPNsense box with `use-auth-secret`
+  (external IP + non-zero quotas), and OPNsense forwards UDP 3478 and the relay
+  range 49152-65535.
+
+  **TURN config is split** between the server side and the browser:
+  - `TURN_URL` — used by the WebRTC sink (server side). Point at the LAN address
+    (e.g. `turn:192.168.1.1:3478?transport=udp`) when the media worker is on the
+    same network as coturn, to avoid NAT reflection.
+  - `TURN_PUBLIC_URL` — handed to the browser (e.g. `turn:199.193.114.34:3478?transport=udp`).
+    Must be a public, reachable address. Defaults to `TURN_URL` if unset.
+  - `TURN_SECRET` — coturn `static-auth-secret`; must match the Auth Secret set
+    in the OPNsense coturn config.
+
+  See `ENV_VARS.md` for the full per-component environment reference.

@@ -38,8 +38,13 @@ defmodule Zer0StreamWeb.StreamController do
         base_url = Application.get_env(:zer0_stream, :playback_base_url, "http://localhost:8080")
         token = Zer0Stream.PlaybackToken.issue(session.id)
 
+        # LivePipeline mode writes HLS to `hls_dir` (served at /hls/); Boombox
+        # mode writes to `hls-boombox` (served at /hls-boombox/). LivePipeline is
+        # active exactly when webrtc_url is set, so use that to pick the path.
+        hls_path = if session.webrtc_url, do: "/hls/", else: "/hls-boombox/"
+
         playlist =
-          "#{base_url}/hls-boombox/stream-session-#{session.id}/master.m3u8?token=#{token}"
+          "#{base_url}#{hls_path}stream-session-#{session.id}/master.m3u8?token=#{token}"
 
         resp = %{
           stream_id: session.stream_id,

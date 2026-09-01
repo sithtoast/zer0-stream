@@ -49,7 +49,7 @@ defmodule Zer0Media.HLSRouter do
   end
 
   get "/hls/*path" do
-    serve_file(conn, path)
+    serve_file(conn, path, hls_dir(), true)
   end
 
   get "/hls-boombox/*path" do
@@ -75,10 +75,6 @@ defmodule Zer0Media.HLSRouter do
 
   match _ do
     send_resp(conn, 404, "not found")
-  end
-
-  defp serve_file(conn, path_segments) do
-    serve_file(conn, path_segments, hls_dir(), false)
   end
 
   defp serve_file(conn, path_segments, root_dir, protected?) do
