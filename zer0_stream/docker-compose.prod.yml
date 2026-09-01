@@ -11,9 +11,12 @@ services:
       PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?PLAYBACK_TOKEN_SECRET is required}
       MAIN_APP_AUTH_SECRET: ${MAIN_APP_AUTH_SECRET:?MAIN_APP_AUTH_SECRET is required}
       CONTROL_PLANE_AUTH_SECRET: ${CONTROL_PLANE_AUTH_SECRET:?CONTROL_PLANE_AUTH_SECRET is required}
-      MEDIA_WORKER_URL: ${MEDIA_WORKER_URL:-http://media_worker:8080}
-      LIFECYCLE_WEBHOOK_URL: ${LIFECYCLE_WEBHOOK_URL:-}
-      LIFECYCLE_WEBHOOK_SECRET: ${LIFECYCLE_WEBHOOK_SECRET:-}
+      # These must be set (in the stack's .env file) — making them required
+      # means a refresh can't silently blank them and quietly break webhooks /
+      # viewer metrics.
+      MEDIA_WORKER_URL: ${MEDIA_WORKER_URL:?MEDIA_WORKER_URL is required}
+      LIFECYCLE_WEBHOOK_URL: ${LIFECYCLE_WEBHOOK_URL:?LIFECYCLE_WEBHOOK_URL is required}
+      LIFECYCLE_WEBHOOK_SECRET: ${LIFECYCLE_WEBHOOK_SECRET:?LIFECYCLE_WEBHOOK_SECRET is required}
       PORT: ${PORT:-4000}
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
       DB_STARTUP_RETRIES: ${DB_STARTUP_RETRIES:-30}
