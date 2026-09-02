@@ -73,7 +73,12 @@ defmodule Zer0Media.WebRTCBin do
   def handle_info({:DOWN, _ref, :process, pid, reason}, _ctx, %{signaling_pid: pid} = state) do
     Membrane.Logger.warning("WebRTC signaling relay died (#{inspect(reason)}) — terminating bin")
     Zer0Media.WebRTCSignalingRegistry.unregister(state.session_id)
-    {[terminate: :normal], state}
+    # `:terminate, :normal` is only legal once the parent has already
+    # requested removal (Membrane raises otherwise); any other reason falls
+    # through to a plain `exit/1`, which detonates our :webrtc_output crash
+    # group as a real (non-normal) member death and triggers the parent's
+    # existing `handle_crash_group_down` rebuild.
+    {[terminate: :shutdown], state}
   end
 
   @impl true
