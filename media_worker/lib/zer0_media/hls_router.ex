@@ -170,7 +170,11 @@ defmodule Zer0Media.HLSRouter do
 
   defp append_playlist_token(line, token) do
     cond do
-      String.starts_with?(line, "#EXT-X-MAP:URI=\"") ->
+      # Covers both #EXT-X-MAP:URI="..." (init segment) and #EXT-X-MEDIA:...
+      # URI="..." (alternate audio/video rendition, used by hls_mode: :separate_av)
+      # — both embed a playlist/segment reference in a tag line, which the
+      # plain-comment branch below would otherwise leave untokened.
+      String.contains?(line, ~s(URI=")) ->
         Regex.replace(~r/URI="([^"]+)"/, line, "URI=\"\\1?token=#{token}\"")
 
       line == "" or String.starts_with?(line, "#") ->
@@ -190,7 +194,7 @@ defmodule Zer0Media.HLSRouter do
 
   defp append_viewer_id_to_line(line, viewer_id) do
     cond do
-      String.starts_with?(line, "#EXT-X-MAP:URI=\"") ->
+      String.contains?(line, ~s(URI=")) ->
         Regex.replace(~r/URI="([^"]+)"/, line, fn _, url ->
           "URI=\"#{append_query_param(url, "viewer_id", viewer_id)}\""
         end)
