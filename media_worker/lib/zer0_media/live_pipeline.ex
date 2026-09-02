@@ -217,7 +217,26 @@ defmodule Zer0Media.LivePipeline do
   @impl true
   def handle_crash_group_down(:webrtc_output, _ctx, state) do
     Membrane.Logger.warning("WebRTC output group went down — restarting")
+    restart_webrtc(state)
+  end
 
+  # ExWebRTCSink/PeerConnection exits with reason :normal (not a crash) once ICE
+  # gives up on a connection (e.g. after "Requested ICE agent to move to the
+  # failed state"). A :normal exit does NOT trigger handle_crash_group_down
+  # (Membrane only detonates/rebuilds a crash group on an abnormal reason), so
+  # without this clause the webrtc child (and its linked signaling process)
+  # would silently disappear forever, leaving the viewer's WebRTC WebSocket
+  # 404-ing on every reconnect attempt with no server-side log at all.
+  @impl true
+  def handle_child_terminated(:webrtc, %{exit_reason: :normal}, state) do
+    Membrane.Logger.warning("WebRTC child exited normally (ICE gave up) — restarting")
+    restart_webrtc(state)
+  end
+
+  @impl true
+  def handle_child_terminated(_child, _ctx, state), do: {[], state}
+
+  defp restart_webrtc(state) do
     # Stop the old viewer heartbeat (viewer will get a new one on reconnect).
     state = stop_webrtc_heartbeat(state)
 
