@@ -11,6 +11,7 @@ defmodule Zer0Media.Application do
 
     children = [
       Zer0Media.BoomboxSessionSupervisor,
+      Zer0Media.LivePipelineSupervisor,
       Zer0Media.HLSCleanup,
       Zer0Media.ViewerTracker,
       Zer0Media.ViewerMetricsReporter,

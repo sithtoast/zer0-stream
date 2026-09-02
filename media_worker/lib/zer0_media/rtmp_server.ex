@@ -74,13 +74,13 @@ defmodule Zer0Media.RTMPServer do
     session_id = to_string(session_id)
     output_dir = hls_output_dir(session_id)
 
-    case Membrane.Pipeline.start_link(Zer0Media.LivePipeline,
+    case Zer0Media.LivePipelineSupervisor.start_pipeline(
            client_ref: client_ref,
            output_dir: output_dir,
            session_id: session_id,
            parent: self()
          ) do
-      {:ok, _supervisor, pipeline} ->
+      {:ok, _pipeline_supervisor_pid, pipeline} ->
         signaling_url = signaling_url(session_id)
 
         Logger.info(

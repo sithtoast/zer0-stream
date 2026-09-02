@@ -81,6 +81,12 @@ defmodule Zer0Media.WebRTCBin do
     {[terminate: :shutdown], state}
   end
 
+  # A stray :DOWN for a since-replaced signaling_pid (e.g. from a prior
+  # incarnation of this bin) — the current signaling_pid is handled above,
+  # this just quiets Membrane's default "no handle_info" warning log for it.
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, _ctx, state), do: {[], state}
+
   @impl true
   def handle_terminate_request(_ctx, state) do
     Zer0Media.WebRTCSignalingRegistry.unregister(state.session_id)
