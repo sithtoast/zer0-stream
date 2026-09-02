@@ -18,7 +18,17 @@ defmodule Zer0Media.Application do
       Zer0Media.SessionTracker,
       Zer0Media.SessionHeartbeatReporter,
       Zer0Media.WebRTCSignalingRegistry,
-      {Bandit, plug: Zer0Media.HLSRouter, port: http_port(), scheme: :http}
+      # ThousandIsland (Bandit's transport) defaults read_timeout to 60s,
+      # closing any connection that hasn't received CLIENT-sent data in that
+      # window. Our /webrtc/:session_id signaling socket only ever pushes
+      # server->client keep-alives, so idle-looking (but healthy) viewer
+      # connections were being silently killed at the 60s mark. HLS/API
+      # requests are unaffected since they always complete well under this.
+      {Bandit,
+       plug: Zer0Media.HLSRouter,
+       port: http_port(),
+       scheme: :http,
+       thousand_island_options: [read_timeout: :infinity]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

@@ -1,0 +1,8 @@
+servers {
+	timeouts {
+		read_body   30s
+		read_header 30s
+		write       0s
+		idle        0s
+	}
+}
