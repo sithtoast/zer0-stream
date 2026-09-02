@@ -56,7 +56,7 @@ defmodule Zer0StreamWeb.StreamController do
         resp =
           if session.webrtc_url do
             resp
-            |> Map.put(:webrtc_url, session.webrtc_url)
+            |> Map.put(:webrtc_url, append_token(session.webrtc_url, token))
             |> maybe_put_ice_servers(session.webrtc_ice_servers)
           else
             resp
@@ -64,6 +64,16 @@ defmodule Zer0StreamWeb.StreamController do
 
         json(conn, resp)
     end
+  end
+
+  # Appends the same playback token used for HLS so the media worker can
+  # derive one consistent viewer_id regardless of which transport (HLS or
+  # WebRTC) a viewer's request/connection came in on, avoiding double-counted
+  # viewers when a client is briefly on both (e.g. HLS fallback).
+  defp append_token(url, token) do
+    uri = URI.parse(url)
+    query = uri.query |> to_string() |> URI.decode_query() |> Map.put("token", token) |> URI.encode_query()
+    URI.to_string(%{uri | query: query})
   end
 
   defp maybe_put_ice_servers(resp, nil), do: resp

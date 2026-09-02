@@ -155,6 +155,33 @@ or completed stream session.
 Set `CONTROL_PLANE_URL` through application configuration when the control
 plane is not running at `http://localhost:4000`.
 
+## WebRTC / LivePipeline mode
+
+Set `LIVE_PIPELINE_MODE=true` to run the Membrane `LivePipeline`, which ingests
+RTMP and tees the stream to **both** HLS and WebRTC from a single source. This is
+the production path (the Boombox path below is legacy).
+
+```sh
+LIVE_PIPELINE_MODE=true \
+WEBRTC_PUBLIC_URL_TEMPLATE=wss://stream.dev.zer0.tv/webrtc/:session_id \
+TURN_URL=turn:192.168.1.1:3478?transport=udp \
+TURN_PUBLIC_URL=turn:199.193.114.34:3478?transport=udp \
+TURN_SECRET=<coturn-auth-secret> \
+mix zer0_media.dev --control-plane-url http://localhost:4001
+```
+
+- **Signaling** is served on the shared HTTP origin (port 8080) at
+  `/webrtc/<session_id>`, so it flows through the existing `stream.dev.zer0.tv`
+  reverse proxy with no extra Caddy route.
+- **TURN** is used for NAT traversal. `TURN_URL` is the server-side TURN server
+  (use the LAN address when on the same network as coturn); `TURN_PUBLIC_URL` is
+  the public TURN server handed to the browser. `TURN_SECRET` must match coturn's
+  `static-auth-secret`.
+- The WebRTC legs are linked on demand (only when a viewer connects) and live in
+  a temporary crash group so a WebRTC failure doesn't take HLS down.
+
+See [`../webrtc.md`](../webrtc.md) and [`../ENV_VARS.md`](../ENV_VARS.md).
+
 ## Concurrent Viewer Counts
 
 The worker reports **concurrent HLS playback clients**, not unique users. A
@@ -164,15 +191,13 @@ is 30 seconds (`VIEWER_TTL_SECONDS`); a client disappears from the count after
 it stops requesting HLS media for that interval. The live count is in-memory,
 approximate, and can lag a disconnect by up to the TTL.
 
-The worker identifies a playback client with its `zer0_viewer_id` first-party
-cookie. Custom clients can instead send a stable, opaque `viewer_id` query
-parameter (1-128 bytes) on every playlist and segment request. `hls.js` can
-reliably use either cookies with `withCredentials` or a custom loader that adds
-the query parameter to every request. Safari/native HLS does not provide a
-JavaScript hook for per-segment headers or query parameters; it therefore uses
-the cookie when available. If that cookie is blocked as third-party storage,
-Safari requests cannot be reliably attributed to one playback client and the
-count may overcount.
+The worker identifies a playback client by deriving a stable `viewer_id` from
+the **playback token** (SHA-256 of the token), which is present on every request
+in a playback session. This avoids generating a new viewer per request when the
+`SameSite=Lax` `zer0_viewer_id` cookie isn't sent back on cross-origin
+subresource requests (which previously inflated the count). Custom clients can
+also send a stable, opaque `viewer_id` query parameter (1-128 bytes) on every
+playlist and segment request.
 
 `GET /api/sessions/:id/viewers` is an internal control-plane route. It returns
 the current snapshot for the session ID encoded in the HLS path:
@@ -204,11 +229,13 @@ makes the historical series survive worker restarts. The main app can retrieve
 up to 1,000 durable samples and their arithmetic mean through its normal
 service authentication at `GET /api/streams/:id/viewer-metrics?limit=100`.
 
-## Temporary Boombox packaging probe
+## Legacy Boombox path (not WebRTC)
 
-The worker uses the supervised Boombox path by default. Each authorized session
-gets its own local RTMP listener and Boombox process. To temporarily roll back
-to the legacy direct HLS path, set `LEGACY_HLS_MODE=true`.
+The **LivePipeline path above is the production path**. The Boombox path is
+legacy: it uses a supervised Boombox process per session and only produces HLS
+(no WebRTC). It is still the default when `LIVE_PIPELINE_MODE` is unset, and
+writes `priv/hls-boombox/stream-session-<session-id>.m3u8` served at
+`/hls-boombox/...`. Set `LEGACY_HLS_MODE=true` to force it explicitly.
 
 Boombox lives in the sibling `boombox_runtime/` Mix app because its dependency
 graph is incompatible with the media worker's control-plane dependencies. The

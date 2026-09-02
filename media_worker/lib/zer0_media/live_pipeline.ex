@@ -142,7 +142,16 @@ defmodule Zer0Media.LivePipeline do
   end
 
   defp start_webrtc_heartbeat(%{webrtc_viewer_id: nil} = state) do
-    viewer_id = :crypto.strong_rand_bytes(16) |> Base.url_encode64()
+    # Prefer the viewer_id the browser's WebRTC signaling WebSocket connected
+    # with (derived from the same playback token as HLS, see
+    # Zer0Media.WebRTCSignalingRegistry) so a viewer who is briefly on both
+    # transports (e.g. HLS fallback while WebRTC reconnects) is counted once,
+    # not twice. Fall back to a random id only if none was recorded (e.g. a
+    # signaling client that didn't send a token/viewer_id).
+    viewer_id =
+      (state.session_id && Zer0Media.WebRTCSignalingRegistry.get_viewer_id(state.session_id)) ||
+        (:crypto.strong_rand_bytes(16) |> Base.url_encode64())
+
     timer = Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
 
     if state.session_id do

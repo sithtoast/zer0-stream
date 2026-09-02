@@ -30,7 +30,12 @@ defmodule Zer0Media.MixProject do
       {:membrane_aac_fdk_plugin, "~> 0.18"},
       {:req, "~> 0.5"},
       {:bandit, "~> 1.5"},
-      {:plug, "~> 1.16"}
+      {:plug, "~> 1.16"},
+      # Override transitive ex_ice ~> 0.13.0 pinned by ex_webrtc/membrane_webrtc_plugin:
+      # 0.16.0 fixes a crash on TURN refresh_permission send errors
+      # (handle_ex_turn_msg badmatch on {:error, :closed}) that was killing
+      # long-running WebRTC sessions in production.
+      {:ex_ice, "~> 0.16", override: true}
     ]
   end
 end

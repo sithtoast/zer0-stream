@@ -64,6 +64,10 @@ defmodule Zer0Media.HLSRouter do
   			send_resp(conn, 404, "not found")
 
   		signaling ->
+  			conn = fetch_cookies(conn) |> fetch_query_params()
+  			{viewer_id, conn} = viewer_id(conn)
+  			Zer0Media.WebRTCSignalingRegistry.set_viewer_id(session_id, viewer_id)
+
   			WebSockAdapter.upgrade(
   				conn,
   				Zer0Media.WebRTCSignalingWebSock,
@@ -225,20 +229,34 @@ defmodule Zer0Media.HLSRouter do
   defp viewer_id(conn) do
     conn = fetch_cookies(conn)
 
-    case conn.query_params["viewer_id"] || conn.cookies["zer0_viewer_id"] do
-      viewer_id when is_binary(viewer_id) and byte_size(viewer_id) in 1..128 ->
-        {viewer_id, conn}
+    cond do
+      # Stable per playback session: derive from the playback token, which is
+      # present on every request in a session. This avoids generating a new
+      # viewer_id per request when the SameSite=Lax cookie isn't sent back on
+      # cross-origin subresource requests (which inflated the viewer count).
+      is_binary(token = conn.query_params["token"]) and token != "" ->
+        {token_viewer_id(token), conn}
 
-      _ ->
-        viewer_id = :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
+      is_binary(vid = conn.query_params["viewer_id"]) and byte_size(vid) in 1..128 ->
+        {vid, conn}
 
-        {viewer_id,
-         put_resp_cookie(conn, "zer0_viewer_id", viewer_id,
+      is_binary(vid = conn.cookies["zer0_viewer_id"]) and byte_size(vid) in 1..128 ->
+        {vid, conn}
+
+      true ->
+        vid = :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
+
+        {vid,
+         put_resp_cookie(conn, "zer0_viewer_id", vid,
            http_only: true,
            same_site: "Lax",
            max_age: viewer_cookie_max_age()
          )}
     end
+  end
+
+  defp token_viewer_id(token) do
+    :crypto.hash(:sha256, token) |> Base.url_encode64(padding: false)
   end
 
   defp viewer_cookie_max_age, do: Application.get_env(:zer0_media, :viewer_cookie_max_age, 86_400)
