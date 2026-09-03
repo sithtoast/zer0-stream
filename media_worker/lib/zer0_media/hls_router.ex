@@ -64,16 +64,26 @@ defmodule Zer0Media.HLSRouter do
   			send_resp(conn, 404, "not found")
 
   		signaling ->
-  			conn = fetch_cookies(conn) |> fetch_query_params()
-  			{viewer_id, conn} = viewer_id(conn)
-  			Zer0Media.WebRTCSignalingRegistry.set_viewer_id(session_id, viewer_id)
+  			case Zer0Media.WebRTCSignalingRegistry.claim_viewer(session_id) do
+  				{:error, :occupied} ->
+  					# Only one WebRTC viewer is supported per session today; a second
+  					# connection attempt must be rejected here, not passed through to
+  					# Signaling.register_peer, which crashes (kicking out the first
+  					# viewer) rather than erroring cleanly on a second peer.
+  					send_resp(conn, 409, "webrtc viewer slot already in use for this session")
 
-  			WebSockAdapter.upgrade(
-  				conn,
-  				Zer0Media.WebRTCSignalingWebSock,
-  				%{signaling: signaling},
-  				[]
-  			)
+  				:ok ->
+  					conn = fetch_cookies(conn) |> fetch_query_params()
+  					{viewer_id, conn} = viewer_id(conn)
+  					Zer0Media.WebRTCSignalingRegistry.set_viewer_id(session_id, viewer_id)
+
+  					WebSockAdapter.upgrade(
+  						conn,
+  						Zer0Media.WebRTCSignalingWebSock,
+  						%{signaling: signaling, session_id: session_id},
+  						[]
+  					)
+  			end
   	end
   end
 

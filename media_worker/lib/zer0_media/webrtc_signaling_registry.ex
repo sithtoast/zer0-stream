@@ -53,8 +53,26 @@ defmodule Zer0Media.WebRTCSignalingRegistry do
     GenServer.call(__MODULE__, {:get_viewer_id, session_id})
   end
 
+  @doc """
+  Atomically claims the single WebRTC viewer slot for a session.
+
+  `Membrane.WebRTC.Signaling` only supports exactly one non-element peer at a
+  time — a second `register_peer` call raises (crashing the shared Signaling
+  process, kicking out the first viewer, and potentially cascading into a
+  full pipeline crash on repeated attempts). Callers must claim the slot
+  here BEFORE calling `register_peer`, and release it on disconnect.
+  """
+  def claim_viewer(session_id) do
+    GenServer.call(__MODULE__, {:claim_viewer, session_id})
+  end
+
+  @doc "Releases the viewer slot claimed via `claim_viewer/1`."
+  def release_viewer(session_id) do
+    GenServer.call(__MODULE__, {:release_viewer, session_id})
+  end
+
   @impl true
-  def init(_opts), do: {:ok, %{signalings: %{}, viewer_ids: %{}}}
+  def init(_opts), do: {:ok, %{signalings: %{}, viewer_ids: %{}, claimed: MapSet.new()}}
 
   @impl true
   def handle_call({:register, session_id, signaling}, _from, state) do
@@ -70,8 +88,21 @@ defmodule Zer0Media.WebRTCSignalingRegistry do
       state
       |> update_in([:signalings], &Map.delete(&1, session_id))
       |> update_in([:viewer_ids], &Map.delete(&1, session_id))
+      |> update_in([:claimed], &MapSet.delete(&1, session_id))
 
     {:reply, :ok, state}
+  end
+
+  def handle_call({:claim_viewer, session_id}, _from, state) do
+    if MapSet.member?(state.claimed, session_id) do
+      {:reply, {:error, :occupied}, state}
+    else
+      {:reply, :ok, update_in(state.claimed, &MapSet.put(&1, session_id))}
+    end
+  end
+
+  def handle_call({:release_viewer, session_id}, _from, state) do
+    {:reply, :ok, update_in(state.claimed, &MapSet.delete(&1, session_id))}
   end
 
   def handle_call({:set_viewer_id, session_id, viewer_id}, _from, state) do
