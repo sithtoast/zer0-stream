@@ -34,6 +34,7 @@ defmodule Zer0StreamWeb.Router do
     pipe_through [:api, :main_app_auth]
 
     get "/:id/playback", StreamController, :playback
+    post "/:id/playback", StreamController, :playback
     get "/:id/viewers", StreamController, :viewers
     get "/:id/viewer-metrics", StreamController, :viewer_metrics
     get "/:id/updates", StreamController, :updates

@@ -30,13 +30,33 @@ defmodule Zer0StreamWeb.StreamController do
   end
 
   def playback(conn, %{"id" => id}) do
+    # Service authentication signs the body, not query parameters.
+    case conn.body_params do
+      %{"viewer_id" => viewer_id} ->
+        if Zer0Stream.PlaybackToken.valid_viewer_id?(viewer_id) do
+          playback_response(conn, %{"id" => id, "viewer_id" => viewer_id})
+        else
+          conn |> put_status(:unprocessable_entity) |> json(%{error: "invalid viewer identity"})
+        end
+
+      _ ->
+        playback_response(conn, %{"id" => id})
+    end
+  end
+
+  defp playback_response(conn, %{"id" => id} = params) do
     case Streams.get_live_session(id) do
       nil ->
         send_resp(conn, :not_found, "")
 
       session ->
         base_url = Application.get_env(:zer0_stream, :playback_base_url, "http://localhost:8080")
-        token = Zer0Stream.PlaybackToken.issue(session.id)
+
+        token =
+          case params["viewer_id"] do
+            nil -> Zer0Stream.PlaybackToken.issue(session.id)
+            viewer_id -> Zer0Stream.PlaybackToken.issue_for_viewer(session.id, viewer_id)
+          end
 
         # LivePipeline mode writes HLS to `hls_dir` (served at /hls/); Boombox
         # mode writes to `hls-boombox` (served at /hls-boombox/). LivePipeline is
@@ -72,12 +92,22 @@ defmodule Zer0StreamWeb.StreamController do
   # viewers when a client is briefly on both (e.g. HLS fallback).
   defp append_token(url, token) do
     uri = URI.parse(url)
-    query = uri.query |> to_string() |> URI.decode_query() |> Map.put("token", token) |> URI.encode_query()
+
+    query =
+      uri.query
+      |> to_string()
+      |> URI.decode_query()
+      |> Map.put("token", token)
+      |> URI.encode_query()
+
     URI.to_string(%{uri | query: query})
   end
 
   defp maybe_put_ice_servers(resp, nil), do: resp
-  defp maybe_put_ice_servers(resp, %{"servers" => servers}), do: Map.put(resp, :webrtc_ice_servers, servers)
+
+  defp maybe_put_ice_servers(resp, %{"servers" => servers}),
+    do: Map.put(resp, :webrtc_ice_servers, servers)
+
   defp maybe_put_ice_servers(resp, _), do: resp
 
   def viewers(conn, %{"id" => id}) do
@@ -147,11 +177,14 @@ defmodule Zer0StreamWeb.StreamController do
     end
   end
 
-  def create_persistent(conn, %{
-        "creator_id" => creator_id,
-        "title" => title,
-        "request_id" => request_id
-      } = params) do
+  def create_persistent(
+        conn,
+        %{
+          "creator_id" => creator_id,
+          "title" => title,
+          "request_id" => request_id
+        } = params
+      ) do
     attrs = %{
       creator_id: creator_id,
       title: title,

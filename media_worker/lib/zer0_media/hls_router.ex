@@ -68,14 +68,18 @@ defmodule Zer0Media.HLSRouter do
 
       pipeline ->
         conn = fetch_cookies(conn) |> fetch_query_params()
-        {viewer_id, conn} = viewer_id(conn)
+        {viewer_id, conn} = viewer_id(conn, session_id)
 
-        WebSockAdapter.upgrade(
-          conn,
-          Zer0Media.WebRTCSignalingWebSock,
-          %{pipeline: pipeline, viewer_id: viewer_id},
-          []
-        )
+        if Zer0Media.PlaybackToken.valid?(conn.query_params["token"], session_id) do
+          WebSockAdapter.upgrade(
+            conn,
+            Zer0Media.WebRTCSignalingWebSock,
+            %{pipeline: pipeline, viewer_id: viewer_id},
+            []
+          )
+        else
+          send_resp(conn, 401, "unauthorized")
+        end
     end
   end
 
@@ -100,7 +104,7 @@ defmodule Zer0Media.HLSRouter do
         send_resp(conn, 401, "unauthorized")
 
       protected? and Path.extname(requested) == ".m3u8" ->
-        {viewer_id, conn} = viewer_id(conn)
+        {viewer_id, conn} = viewer_id(conn, session_id)
 
         body =
           requested
@@ -115,7 +119,7 @@ defmodule Zer0Media.HLSRouter do
         |> send_resp(200, body)
 
       Path.extname(requested) == ".m3u8" ->
-        {viewer_id, conn} = viewer_id(conn)
+        {viewer_id, conn} = viewer_id(conn, session_id)
         body = requested |> File.read!() |> append_viewer_id(viewer_id)
 
         conn
@@ -125,7 +129,7 @@ defmodule Zer0Media.HLSRouter do
         |> send_resp(200, body)
 
       true ->
-        {viewer_id, conn} = viewer_id(conn)
+        {viewer_id, conn} = viewer_id(conn, session_id)
 
         conn
         |> track_viewer(session_id, viewer_id)
@@ -235,16 +239,17 @@ defmodule Zer0Media.HLSRouter do
     conn
   end
 
-  defp viewer_id(conn) do
+  defp viewer_id(conn, session_id) do
     conn = fetch_cookies(conn)
 
     cond do
-      # Stable per playback session: derive from the playback token, which is
-      # present on every request in a session. This avoids generating a new
-      # viewer_id per request when the SameSite=Lax cookie isn't sent back on
-      # cross-origin subresource requests (which inflated the viewer count).
+      # Verified v2 identity survives token renewal and transport changes.
+      # Legacy tokens retain their hash identity until they expire.
       is_binary(token = conn.query_params["token"]) and token != "" ->
-        {token_viewer_id(token), conn}
+        case Zer0Media.PlaybackToken.viewer_id(token, session_id) do
+          {:ok, id} -> {id, conn}
+          :error -> {nil, conn}
+        end
 
       is_binary(vid = conn.query_params["viewer_id"]) and byte_size(vid) in 1..128 ->
         {vid, conn}
@@ -262,10 +267,6 @@ defmodule Zer0Media.HLSRouter do
            max_age: viewer_cookie_max_age()
          )}
     end
-  end
-
-  defp token_viewer_id(token) do
-    :crypto.hash(:sha256, token) |> Base.url_encode64(padding: false)
   end
 
   defp viewer_cookie_max_age, do: Application.get_env(:zer0_media, :viewer_cookie_max_age, 86_400)

@@ -127,6 +127,25 @@ defmodule Zer0StreamWeb.StreamControllerTest do
     assert url =~ "/hls-boombox/stream-session-#{session.id}/master.m3u8?token="
   end
 
+  test "signed playback request carries viewer identity", %{conn: conn} do
+    {:ok, creator} = Streams.create_creator(%{external_id: "stable-viewer"})
+    {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Stable"})
+    {:ok, %{token: key}} = Streams.rotate_creator_stream_key(creator)
+    {:ok, session} = Zer0Stream.Ingest.authorize_rtmp(key, "stable-viewer-connection")
+    path = "/api/streams/#{stream.id}/playback"
+    params = %{"viewer_id" => "opaque-alice"}
+    result = conn |> service_conn(:post, path, params) |> post(path, params) |> json_response(200)
+
+    token =
+      result["playback_url"]
+      |> URI.parse()
+      |> Map.fetch!(:query)
+      |> URI.decode_query()
+      |> Map.fetch!("token")
+
+    assert Zer0Stream.PlaybackToken.viewer_id(token, session.id) == {:ok, "viewer:opaque-alice"}
+  end
+
   test "does not return playback for an offline stream", %{conn: conn} do
     {:ok, creator} = Streams.create_creator(%{external_id: "creator-offline"})
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Offline Test"})
