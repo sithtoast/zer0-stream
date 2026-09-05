@@ -271,3 +271,12 @@ needed for the supervised worker path.
 ```
 
 
+
+### TURN dependency patch
+
+The worker uses tracked `vendor/ex_ice` (0.16.1 plus the patch documented in
+`vendor/ex_ice/ZER0_PATCHES.md`). It preserves the relay transport when a
+successful ICE check returns a mapped address different from the TURN
+allocation, avoiding a public-address priority lookup crash. The Dockerfile
+copies this dependency before fetching dependencies. Rebuild and redeploy the
+media worker image to apply it; restarting an existing image is insufficient.

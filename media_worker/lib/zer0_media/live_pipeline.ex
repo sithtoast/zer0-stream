@@ -212,9 +212,19 @@ defmodule Zer0Media.LivePipeline do
 
   @impl true
   def handle_child_terminated({:webrtc, peer}, %{exit_reason: :normal} = ctx, state) do
-    remaining = for {name, %{group: {:webrtc_output, ^peer}}} <- ctx.children, do: name
-    actions = if remaining == [], do: [], else: [remove_children: remaining]
-    {actions, forget_viewer(peer, state)}
+    # A socket DOWN may already have initiated removal of the entire group.
+    # Do not submit removal again as each child acknowledges termination.
+    if Map.has_key?(state.viewers, peer) do
+      remaining =
+        for {name, %{group: {:webrtc_output, ^peer}} = child} <- ctx.children,
+            not child.terminating?,
+            do: name
+
+      actions = if remaining == [], do: [], else: [remove_children: remaining]
+      {actions, forget_viewer(peer, state)}
+    else
+      {[], state}
+    end
   end
 
   def handle_child_terminated(_child, _ctx, state), do: {[], state}

@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY media_worker/mix.exs media_worker/mix.lock ./media_worker/
+COPY media_worker/vendor ./media_worker/vendor
 COPY boombox_runtime/mix.exs boombox_runtime/mix.lock ./boombox_runtime/
 
 RUN mix local.hex --force && mix local.rebar --force

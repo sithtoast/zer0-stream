@@ -34,8 +34,9 @@ defmodule Zer0Media.MixProject do
       # Override transitive ex_ice ~> 0.13.0 pinned by ex_webrtc/membrane_webrtc_plugin:
       # 0.16.0 fixes a crash on TURN refresh_permission send errors
       # (handle_ex_turn_msg badmatch on {:error, :closed}) that was killing
-      # long-running WebRTC sessions in production.
-      {:ex_ice, "~> 0.16", override: true}
+      # long-running WebRTC sessions in production. The vendored 0.16.1 also
+      # preserves TURN routing when a successful check reports a different mapped address.
+      {:ex_ice, path: "vendor/ex_ice", override: true}
     ]
   end
 end
