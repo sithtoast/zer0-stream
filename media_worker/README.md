@@ -280,3 +280,19 @@ successful ICE check returns a mapped address different from the TURN
 allocation, avoiding a public-address priority lookup crash. The Dockerfile
 copies this dependency before fetching dependencies. Rebuild and redeploy the
 media worker image to apply it; restarting an existing image is insufficient.
+
+### Viewer TURN quotas and mobile fallback
+
+With `TURN_SECRET`, credentials now use a separate stable identity for each
+viewer and for the worker/browser sides, rather than sharing the `zer0` user.
+Each signaling connection sends fresh browser credentials in an `ice_servers`
+message before SDP. This avoids sharing the per-user allocation quota across
+an entire stream and avoids reusing credentials generated at stream start.
+Static `TURN_USERNAME`/`TURN_PASSWORD` credentials remain shared by design.
+
+Deploy both the worker and frontend for this change. The frontend retains HLS
+while probing WebRTC, bounds retries, and closes connections on navigation.
+Coturn's total quota still counts allocations across all users; it is not a
+viewer limit. `stale-nonce` governs authentication nonce expiry, not allocation
+capacity. Keep quota settings while retesting; size the total quota according
+to measured concurrent allocation use as the audience grows.

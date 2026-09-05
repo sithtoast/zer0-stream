@@ -6,7 +6,8 @@ defmodule Zer0Media.WebRTCSignalingWebSock do
   Serves the same JSON message format as the plugin's built-in
   `SimpleWebSocketServer` (`sdp_offer`, `sdp_answer`, `ice_candidate`, plus a
   periodic `keep_alive`), so the existing frontend `WebRtcPlayer` works
-  unchanged against the shared origin.
+  against the shared origin. An initial `ice_servers` message supplies fresh
+  per-viewer browser credentials before SDP negotiation.
   """
   @behaviour WebSock
 
@@ -22,7 +23,14 @@ defmodule Zer0Media.WebRTCSignalingWebSock do
     Signaling.register_peer(signaling, message_format: :json_data)
     send(opts.pipeline, {:add_webrtc_viewer, self(), signaling, opts.viewer_id})
     Process.send_after(self(), :keep_alive, 30_000)
-    {:ok, %{signaling: signaling, pipeline: opts.pipeline}}
+    # Send fresh per-viewer credentials before the queued SDP offer. The
+    # stream-level credentials in the control plane may be shared or expired.
+    config = %{
+      "type" => "ice_servers",
+      "data" => Zer0Media.TURN.browser_ice_servers(opts.viewer_id)
+    }
+
+    {:push, {:text, Jason.encode!(config)}, %{signaling: signaling, pipeline: opts.pipeline}}
   end
 
   @impl true

@@ -1,7 +1,8 @@
 defmodule Zer0Media.TURN do
   @moduledoc """
-  Builds the ICE servers (STUN + TURN) used by the WebRTC sink and reported to
-  the control plane so the browser can use the same TURN credentials.
+  Builds ICE servers (STUN + TURN) with separate quota identities for each
+  viewer and each side of the connection. Browser credentials are refreshed
+  through signaling; the control plane also receives a compatibility fallback.
 
   Supports two credential modes:
 
@@ -34,15 +35,18 @@ defmodule Zer0Media.TURN do
   @default_stun "stun:stun.l.google.com:19302"
 
   @doc "Returns the ICE servers list for the WebRTC sink (server side)."
-  def ice_servers do
-    [stun_server() | turn_servers(System.get_env("TURN_URL"))]
+  def ice_servers(viewer_id \\ nil) do
+    [stun_server() | turn_servers(System.get_env("TURN_URL"), identity("worker", viewer_id))]
   end
 
   @doc "Returns the ICE servers to hand to the browser (public URL)."
-  def browser_ice_servers do
+  def browser_ice_servers(viewer_id \\ nil) do
     [
       stun_server()
-      | turn_servers(System.get_env("TURN_PUBLIC_URL") || System.get_env("TURN_URL"))
+      | turn_servers(
+          System.get_env("TURN_PUBLIC_URL") || System.get_env("TURN_URL"),
+          identity("browser", viewer_id)
+        )
     ]
   end
 
@@ -50,10 +54,10 @@ defmodule Zer0Media.TURN do
     %{urls: System.get_env("STUN_URL", @default_stun)}
   end
 
-  defp turn_servers(nil), do: []
+  defp turn_servers(nil, _identity), do: []
 
-  defp turn_servers(urls) do
-    {username, credential} = credentials()
+  defp turn_servers(urls, identity) do
+    {username, credential} = credentials(identity)
 
     urls
     |> String.split(",", trim: true)
@@ -61,26 +65,27 @@ defmodule Zer0Media.TURN do
     |> Enum.map(fn url -> %{urls: url, username: username, credential: credential} end)
   end
 
-  defp credentials do
+  defp credentials(identity) do
     case System.get_env("TURN_SECRET") do
       nil ->
         {System.get_env("TURN_USERNAME", ""), System.get_env("TURN_PASSWORD", "")}
 
       secret ->
-        username = "#{expiry_unix()}:#{user_id()}"
+        username = "#{expiry_unix()}:#{identity}"
         credential = :crypto.mac(:hmac, :sha, secret, username) |> Base.encode64()
         {username, credential}
-   
     end
   end
 
   defp expiry_unix do
-
     System.system_time(:second) + 3600
   end
 
-  defp user_id do
-    "zer0"
+  # Coturn's REST-auth quota uses the identity after the timestamp. Keep it
+  # stable across retries but separate for each viewer and each side of TURN.
+  defp identity(side, viewer_id) do
+    value = viewer_id || Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
+    digest = :crypto.hash(:sha256, to_string(value)) |> Base.url_encode64(padding: false)
+    "zer0-#{side}-#{digest}"
   end
 end
-

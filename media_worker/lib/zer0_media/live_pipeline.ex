@@ -88,6 +88,7 @@ defmodule Zer0Media.LivePipeline do
     spec =
       {child({:webrtc, peer}, %Zer0Media.WebRTCBin{
          signaling: signaling,
+         viewer_id: viewer_id,
          video_codec: [:h264],
          ice_ip_filter: &__MODULE__.ice_ip_filter/1
        }), group: {:webrtc_output, peer}, crash_group_mode: :temporary}

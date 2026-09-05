@@ -32,6 +32,7 @@ defmodule Zer0Media.WebRTCBin do
 
   def_options(
     signaling: [],
+    viewer_id: [default: nil],
     video_codec: [],
     ice_ip_filter: [default: &__MODULE__.default_ice_ip_filter/1]
   )
@@ -50,7 +51,7 @@ defmodule Zer0Media.WebRTCBin do
         signaling: signaling,
         tracks: [],
         video_codec: opts.video_codec,
-        ice_servers: Zer0Media.TURN.ice_servers(),
+        ice_servers: Zer0Media.TURN.ice_servers(opts.viewer_id),
         ice_port_range: [0],
         ice_ip_filter: opts.ice_ip_filter
       })

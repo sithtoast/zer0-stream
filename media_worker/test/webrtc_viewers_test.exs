@@ -18,7 +18,10 @@ defmodule Zer0Media.WebRTCViewersTest do
             {Task, :start_link,
              [
                fn ->
-                 {:ok, state} = Socket.init(%{pipeline: pipeline, viewer_id: id})
+                 {:push, {:text, config}, state} =
+                   Socket.init(%{pipeline: pipeline, viewer_id: id})
+
+                 assert %{"type" => "ice_servers"} = Jason.decode!(config)
                  send(owner, {:ready, self(), state.signaling.pid})
 
                  receive do
