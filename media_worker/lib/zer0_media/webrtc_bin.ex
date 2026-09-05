@@ -19,7 +19,7 @@ defmodule Zer0Media.WebRTCBin do
   alias Membrane.{Connector, H264, Opus, RTP}
   alias Membrane.WebRTC.ExWebRTCSink
 
-  def_input_pad :input,
+  def_input_pad(:input,
     availability: :on_request,
     accepted_format: any_of(%H264{alignment: :nalu}, Opus),
     options: [
@@ -28,31 +28,21 @@ defmodule Zer0Media.WebRTCBin do
         description: "Associates the pad with the negotiated track of the given kind."
       ]
     ]
+  )
 
-  def_options session_id: [],
-              video_codec: [],
-              ice_ip_filter: [default: &__MODULE__.default_ice_ip_filter/1]
+  def_options(
+    signaling: [],
+    video_codec: [],
+    ice_ip_filter: [default: &__MODULE__.default_ice_ip_filter/1]
+  )
 
   @doc false
   def default_ice_ip_filter(_ip), do: true
 
   @impl true
   def handle_init(_ctx, opts) do
-    # Create the signaling relay and register it so the shared origin
-    # (HLSRouter at /webrtc/<session_id>) can route a viewer's WebSocket here.
-    # `Signaling.new/0` links the relay to this bin, so it is cleaned up when
-    # the bin terminates.
-    signaling = Membrane.WebRTC.Signaling.new()
-    Zer0Media.WebRTCSignalingRegistry.register(opts.session_id, signaling)
-
-    # Signaling stops itself (reason :normal) whenever its registered peer
-    # dies, e.g. the viewer's WebSocket process when their browser connection
-    # drops for any reason — but since Signaling is only *linked* to this bin
-    # (not a Membrane child), a :normal-reason linked exit does NOT propagate
-    # and this bin would otherwise sit alive forever with a dead signaling
-    # relay, leaving every reconnect attempt 404ing with no server-side log.
-    # Monitoring it directly lets us notice and terminate ourselves so the
-    # parent's handle_child_terminated can rebuild a fresh webrtc leg.
+    # Every viewer has its own relay, owned by its WebSocket process.
+    signaling = opts.signaling
     Process.monitor(signaling.pid)
 
     spec =
@@ -65,19 +55,13 @@ defmodule Zer0Media.WebRTCBin do
         ice_ip_filter: opts.ice_ip_filter
       })
 
-    {[spec: spec],
-     %{video_codec: opts.video_codec, session_id: opts.session_id, signaling_pid: signaling.pid}}
+    {[spec: spec], %{video_codec: opts.video_codec, signaling_pid: signaling.pid}}
   end
 
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, reason}, _ctx, %{signaling_pid: pid} = state) do
     Membrane.Logger.warning("WebRTC signaling relay died (#{inspect(reason)}) — terminating bin")
-    Zer0Media.WebRTCSignalingRegistry.unregister(state.session_id)
-    # `:terminate, :normal` is only legal once the parent has already
-    # requested removal (Membrane raises otherwise); any other reason falls
-    # through to a plain `exit/1`, which detonates our :webrtc_output crash
-    # group as a real (non-normal) member death and triggers the parent's
-    # existing `handle_crash_group_down` rebuild.
+    # An abnormal exit removes only this viewer's temporary crash group.
     {[terminate: :shutdown], state}
   end
 
@@ -89,7 +73,6 @@ defmodule Zer0Media.WebRTCBin do
 
   @impl true
   def handle_terminate_request(_ctx, state) do
-    Zer0Media.WebRTCSignalingRegistry.unregister(state.session_id)
     {[terminate: :normal], state}
   end
 

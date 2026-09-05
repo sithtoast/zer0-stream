@@ -1,7 +1,7 @@
 defmodule Zer0Media.BroadcastTee do
   @moduledoc """
   Splits a stream into a primary output (always forwarded) and an optional
-  secondary output (forwarded only when it has demand).
+  secondary outputs (forwarded only when each has demand).
 
   Unlike `Tee.Parallel` (which waits for all outputs to demand) or `Tee.Master`
   (which pushes to copies and can block), this filter **always** forwards to the
@@ -10,20 +10,24 @@ defmodule Zer0Media.BroadcastTee do
   """
   use Membrane.Filter
 
-  def_input_pad :input,
+  def_input_pad(:input,
     availability: :always,
     flow_control: :auto,
     accepted_format: _any
+  )
 
-  def_output_pad :primary,
+  def_output_pad(:primary,
     availability: :always,
     flow_control: :auto,
     accepted_format: _any
+  )
 
-  def_output_pad :secondary,
+  def_output_pad(:secondary,
     availability: :on_request,
-    flow_control: :auto,
+    flow_control: :manual,
+    demand_unit: :buffers,
     accepted_format: _any
+  )
 
   @impl true
   def handle_init(_ctx, _opts) do
@@ -31,8 +35,9 @@ defmodule Zer0Media.BroadcastTee do
   end
 
   @impl true
-  def handle_stream_format(_pad, format, _ctx, state) do
-    {[stream_format: {:primary, format}], %{state | format: format}}
+  def handle_stream_format(_pad, format, ctx, state) do
+    actions = for {pad, %{direction: :output}} <- ctx.pads, do: {:stream_format, {pad, format}}
+    {actions, %{state | format: format}}
   end
 
   @impl true
@@ -45,10 +50,16 @@ defmodule Zer0Media.BroadcastTee do
   def handle_pad_added(_pad, _ctx, state), do: {[], state}
 
   @impl true
-  def handle_buffer(:input, buffer, _ctx, state) do
-    # `forward` sends to *all* output pads.  For `:auto` pads the framework
-    # checks demand independently per pad — if the secondary isn't demanding
-    # (e.g. its downstream fell behind), only the primary gets the buffer.
-    {[forward: buffer], state}
+  def handle_demand(_pad, _size, :buffers, _ctx, state), do: {[], state}
+
+  @impl true
+  def handle_buffer(:input, buffer, ctx, state) do
+    # Manual secondary pads do not participate in the primary auto-demand path.
+    copies =
+      for {Pad.ref(:secondary, _) = pad, %{demand: demand}} <- ctx.pads,
+          demand > 0,
+          do: {:buffer, {pad, buffer}}
+
+    {[buffer: {:primary, buffer}] ++ copies, state}
   end
 end

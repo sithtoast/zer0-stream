@@ -16,10 +16,13 @@ defmodule Zer0Media.WebRTCSignalingWebSock do
 
   @impl true
   def init(opts) do
-    signaling = opts.signaling
+    signaling = Signaling.new()
+    Process.monitor(signaling.pid)
+    Process.monitor(opts.pipeline)
     Signaling.register_peer(signaling, message_format: :json_data)
+    send(opts.pipeline, {:add_webrtc_viewer, self(), signaling, opts.viewer_id})
     Process.send_after(self(), :keep_alive, 30_000)
-    {:ok, %{signaling: signaling, session_id: opts.session_id}}
+    {:ok, %{signaling: signaling, pipeline: opts.pipeline}}
   end
 
   @impl true
@@ -40,6 +43,11 @@ defmodule Zer0Media.WebRTCSignalingWebSock do
   end
 
   @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    {:stop, :normal, state}
+  end
+
+  @impl true
   def handle_info(message, state) do
     Logger.debug("WebRTC signaling handler ignores unsupported message #{inspect(message)}")
     {:ok, state}
@@ -47,6 +55,6 @@ defmodule Zer0Media.WebRTCSignalingWebSock do
 
   @impl true
   def terminate(_reason, state) do
-    Zer0Media.WebRTCSignalingRegistry.release_viewer(state.session_id)
+    send(state.pipeline, {:remove_webrtc_viewer, self()})
   end
 end

@@ -7,25 +7,20 @@ defmodule Zer0Media.WebRTCBinTest do
   alias Membrane.Testing
   alias Zer0Media.WebRTCBin
 
-  defp free_port do
-    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
-    {:ok, {_address, port}} = :inet.sockname(socket)
-    :gen_tcp.close(socket)
-    port
-  end
-
   test "does not gate the parent pipeline's data flow while the inner WebRTC sink is incomplete" do
-    port = free_port()
+    signaling = Membrane.WebRTC.Signaling.new()
 
     {:ok, _sup, pipeline} =
-      Testing.Pipeline.start_link(spec: [
-        child(:src, %Testing.Source{output: [<<1>>, <<2>>, <<3>>]})
-        |> child(:sink, Testing.Sink),
-        {child(:webrtc, %WebRTCBin{
-           signaling: {:websocket, [port: port]},
-           video_codec: [:h264]
-         }), group: :webrtc_output, crash_group_mode: :temporary}
-      ])
+      Testing.Pipeline.start_link(
+        spec: [
+          child(:src, %Testing.Source{output: [<<1>>, <<2>>, <<3>>]})
+          |> child(:sink, Testing.Sink),
+          {child(:webrtc, %WebRTCBin{
+             signaling: signaling,
+             video_codec: [:h264]
+           }), group: :webrtc_output, crash_group_mode: :temporary}
+        ]
+      )
 
     # The WebRTCBin wraps a WebRTC.Sink that stays `setup: :incomplete` until a
     # viewer connects. If the bin did not complete its own setup immediately, the

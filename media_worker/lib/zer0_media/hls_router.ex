@@ -35,12 +35,15 @@ defmodule Zer0Media.HLSRouter do
 
       conn
       |> put_resp_content_type("application/json")
-      |> send_resp(200, Jason.encode!(%{
-        session_id: session_id_value(id),
-        viewer_count: viewer_count,
-        average_viewer_count_15m: average_viewer_count_15m,
-        updated_at: DateTime.to_iso8601(updated_at)
-      }))
+      |> send_resp(
+        200,
+        Jason.encode!(%{
+          session_id: session_id_value(id),
+          viewer_count: viewer_count,
+          average_viewer_count_15m: average_viewer_count_15m,
+          updated_at: DateTime.to_iso8601(updated_at)
+        })
+      )
     else
       conn
       |> put_resp_content_type("application/json")
@@ -59,32 +62,21 @@ defmodule Zer0Media.HLSRouter do
   # WebRTC signaling WebSocket, served on the shared origin (same port as HLS)
   # so it is reachable through the existing `stream.dev.zer0.tv` reverse proxy.
   get "/webrtc/:session_id" do
-  	case Zer0Media.WebRTCSignalingRegistry.lookup(session_id) do
-  		nil ->
-  			send_resp(conn, 404, "not found")
+    case Zer0Media.WebRTCSignalingRegistry.lookup(session_id) do
+      nil ->
+        send_resp(conn, 404, "not found")
 
-  		signaling ->
-  			case Zer0Media.WebRTCSignalingRegistry.claim_viewer(session_id) do
-  				{:error, :occupied} ->
-  					# Only one WebRTC viewer is supported per session today; a second
-  					# connection attempt must be rejected here, not passed through to
-  					# Signaling.register_peer, which crashes (kicking out the first
-  					# viewer) rather than erroring cleanly on a second peer.
-  					send_resp(conn, 409, "webrtc viewer slot already in use for this session")
+      pipeline ->
+        conn = fetch_cookies(conn) |> fetch_query_params()
+        {viewer_id, conn} = viewer_id(conn)
 
-  				:ok ->
-  					conn = fetch_cookies(conn) |> fetch_query_params()
-  					{viewer_id, conn} = viewer_id(conn)
-  					Zer0Media.WebRTCSignalingRegistry.set_viewer_id(session_id, viewer_id)
-
-  					WebSockAdapter.upgrade(
-  						conn,
-  						Zer0Media.WebRTCSignalingWebSock,
-  						%{signaling: signaling, session_id: session_id},
-  						[]
-  					)
-  			end
-  	end
+        WebSockAdapter.upgrade(
+          conn,
+          Zer0Media.WebRTCSignalingWebSock,
+          %{pipeline: pipeline, viewer_id: viewer_id},
+          []
+        )
+    end
   end
 
   match _ do
@@ -219,7 +211,10 @@ defmodule Zer0Media.HLSRouter do
 
   defp append_query_param(url, key, value) do
     uri = URI.parse(url)
-    query = uri.query |> to_string() |> URI.decode_query() |> Map.put(key, value) |> URI.encode_query()
+
+    query =
+      uri.query |> to_string() |> URI.decode_query() |> Map.put(key, value) |> URI.encode_query()
+
     URI.to_string(%{uri | query: query})
   end
 

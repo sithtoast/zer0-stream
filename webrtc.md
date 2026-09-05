@@ -64,23 +64,19 @@ OBS --RTMP--> media_worker (Membrane pipeline)
    that feeds both HLS and WebRTC from one RTMP source.
 
    **Status: implemented** in `media_worker/lib/zer0_media/live_pipeline.ex`
-   (`Zer0Media.LivePipeline`). Each track is split with `Tee.Master` (HLS is the
-   `:master` output, WebRTC is a passive `:copy`). HLS uses
-   `HTTPAdaptiveStream.SinkBin`; WebRTC uses `WebRTC.Sink` with H.264 passthrough.
-   A `TimestampScaler` (video scale 0.5) corrects the publisher's 2x video
-   timebase.
+   (`Zer0Media.LivePipeline`). `BroadcastTee` sends the primary output to HLS
+   and demand-limited secondary copies to each WebRTC viewer. Video timestamp
+   scaling defaults to `1.0`; publisher-specific corrections are opt-in.
 
-   **WebRTC legs are linked on demand.** They are not wired in `handle_init`;
-   they are linked when the sink reports `:new_tracks` (a viewer has actually
-   joined and negotiated). This prevents the push-mode tee `:copy` pads from
-   backing up and overflowing (killing HLS) when no viewer is watching.
+   Each viewer gets a separate `WebRTCBin`, signaling relay and temporary
+   crash group. Its audio/video legs are linked after track negotiation and
+   ICE/DTLS connection. A disconnect removes only that viewer's branch; the
+   next connection creates a fresh branch. The registry maps session IDs to
+   live pipelines and removes entries when their pipeline exits.
 
-   **The WebRTC sink is wrapped in `Zer0Media.WebRTCBin`.** The WebRTC Sink
-   returns `setup: :incomplete` until a viewer connects, and in Membrane an
-   incomplete child gates the whole pipeline's data flow (stalling HLS). The
-   wrapper bin completes its own setup immediately, so HLS runs independently,
-   while relaying signaling and linking pads to the inner sink. The WebRTC bin
-   lives in a temporary crash group so a WebRTC failure doesn't take HLS down.
+   `WebRTCBin` completes setup immediately so an unconnected peer cannot gate
+   HLS. Each branch transcodes AAC to Opus and passes H.264 through, so audio
+   encoding cost and outgoing bandwidth currently grow per viewer.
 2. **Make packaging permanent** — either fork Boombox as a git dependency with
    the patches, or move HLS/WebRTC packaging into tracked `media_worker` code
    (preferred; aligns with the plan's "Membrane as the media pipeline" goal).

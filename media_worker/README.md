@@ -53,6 +53,19 @@ session, demuxes H.264 and AAC through Membrane, and writes a sliding HLS
 playlist and CMAF segments (audio + video) to
 `priv/hls/stream-session-<id>/master.m3u8`.
 
+WebRTC viewers connect to `/webrtc/<session_id>` on the shared HTTP origin.
+Each socket gets its own signaling relay, peer connection and temporary crash
+group. HLS drives the shared source; a slow or disconnected viewer cannot
+backpressure HLS or another viewer. Audio is currently transcoded to Opus per
+viewer, so CPU and outgoing bandwidth grow with the viewer count.
+
+Video timestamps now default to a scale of `1.0`, preserving the publisher's
+frame rate and bitrate. The previous `0.5` default compressed the timeline and
+could double both. For existing deployments, remove `VIDEO_TIMESTAMP_SCALE=0.5`
+or set it to `1.0`, then restart the stream. Use another scale only for a
+publisher with a verified timestamp error. `AAC_TIMESTAMP_RATE` also defaults
+to `1.0`; clock corrections remain opt-in.
+
 AAC timestamps are passed through `Zer0Media.AudioTimestampNormalizer` before
 reaching the HLS muxer. It rebases PTS/DTS to start at zero and applies a
 linear clock-rate correction (`rate`, default `1.0`, i.e. no correction) so

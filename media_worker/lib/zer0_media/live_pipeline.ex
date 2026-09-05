@@ -1,16 +1,14 @@
 defmodule Zer0Media.LivePipeline do
   @moduledoc """
   Per-session Membrane pipeline that ingests RTMP and delivers **both** HLS and
-  WebRTC from a single source, using `Tee.Master` to split each track.
+  WebRTC from a single source, using `BroadcastTee` to split each track.
 
   HLS uses `Membrane.HTTPAdaptiveStream.SinkBin`. WebRTC uses
   `Membrane.WebRTC.ExWebRTCSink` wrapped in `Zer0Media.WebRTCBin`.
 
-  The `:master` pad drives HLS independently. WebRTC `:copy` pads are only
-  linked after the peer connection is fully established (`:connected`
-  notification), so the push-mode copy pads never overflow into an incomplete
-  sink. The WebRTCBin and its legs live in a temporary crash group so a WebRTC
-  failure doesn't take HLS down.
+  HLS drives the primary pads. Each viewer gets a separate signaling relay,
+  sink and temporary crash group. Secondary pads are linked after negotiation
+  and connection, and cannot backpressure HLS or other viewers.
   """
   use Membrane.Pipeline
 
@@ -28,8 +26,8 @@ defmodule Zer0Media.LivePipeline do
     source = Keyword.get(opts, :source, %RTMP.SourceBin{client_ref: client_ref})
 
     seg_dur = configured_segment_duration()
-    video_scale = configured_rate(:video_timestamp_scale, 0.5)
-    audio_rate = configured_rate(:aac_timestamp_rate, 1.008)
+    video_scale = configured_rate(:video_timestamp_scale, 1.0)
+    audio_rate = configured_rate(:aac_timestamp_rate, 1.0)
 
     structure = [
       # Audio: tee raw AAC → HLS (master) / WebRTC (linked on connect).
@@ -44,7 +42,7 @@ defmodule Zer0Media.LivePipeline do
       )
       |> get_child(:hls),
 
-      # Video: parse H264, correct the publisher's 2x timebase, tee → HLS.
+      # Video: preserve publisher timing by default, then tee → HLS.
       get_child(:source)
       |> via_out(:video)
       |> child(:video_parser, %H264.Parser{output_stream_structure: :avc1})
@@ -64,193 +62,162 @@ defmodule Zer0Media.LivePipeline do
         hls_mode: :separate_av,
         mode: :live,
         target_window_duration: Membrane.Time.seconds(20)
-      }),
-
-      {child(:webrtc, %Zer0Media.WebRTCBin{
-         session_id: session_id,
-         video_codec: [:h264],
-         ice_ip_filter: &__MODULE__.ice_ip_filter/1
-       }), group: :webrtc_output, crash_group_mode: :temporary}
+      })
     ]
 
+    Zer0Media.WebRTCSignalingRegistry.register(session_id, self())
+    Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
+
     {[spec: structure],
-     %{
-       parent: opts[:parent],
-       output_dir: output_dir,
-       session_id: session_id,
-       webrtc_viewer_id: nil,
-       webrtc_heartbeat_timer: nil,
-       webrtc_tracks: nil,
-       webrtc_connected?: false,
-       webrtc_audio_linked?: false,
-       webrtc_video_linked?: false
-     }}
+     %{parent: opts[:parent], output_dir: output_dir, session_id: session_id, viewers: %{}}}
   end
 
   @impl true
-  def handle_playing(_ctx, state) do
-    {[notify_child: {:webrtc, {:add_tracks, [:audio, :video]}}], state}
+  def handle_info({:add_webrtc_viewer, peer, signaling, viewer_id}, _ctx, state) do
+    monitor = Process.monitor(peer)
+
+    viewer = %{
+      monitor: monitor,
+      viewer_id: viewer_id,
+      tracks: [],
+      connected?: false,
+      audio_linked?: false,
+      video_linked?: false
+    }
+
+    spec =
+      {child({:webrtc, peer}, %Zer0Media.WebRTCBin{
+         signaling: signaling,
+         video_codec: [:h264],
+         ice_ip_filter: &__MODULE__.ice_ip_filter/1
+       }), group: {:webrtc_output, peer}, crash_group_mode: :temporary}
+
+    {[spec: spec, notify_child: {{:webrtc, peer}, {:add_tracks, [:audio, :video]}}],
+     put_in(state.viewers[peer], viewer)}
   end
 
-  # ── WebRTC signaling ──────────────────────────────────────────────────────
+  def handle_info({:remove_webrtc_viewer, peer}, _ctx, state), do: remove_viewer(peer, state)
 
-  @impl true
-  def handle_child_notification({:new_tracks, tracks}, :webrtc, _ctx, state) do
-    Membrane.Logger.info("LIVEPIPE negotiated tracks: #{inspect(tracks)}")
-
-    if state.webrtc_connected? do
-      link_webrtc_legs(tracks, state)
-    else
-      {[], %{state | webrtc_tracks: tracks}}
+  def handle_info({:DOWN, ref, :process, peer, _reason}, _ctx, state) do
+    case state.viewers[peer] do
+      %{monitor: ^ref} -> remove_viewer(peer, state)
+      _ -> {[], state}
     end
   end
 
-  @impl true
-  def handle_child_notification(:connected, :webrtc, _ctx, state) do
-    Membrane.Logger.info("LIVEPIPE WebRTC peer connected")
-
-    # Start viewer heartbeat for this WebRTC connection.
-    state = start_webrtc_heartbeat(state)
-    state = %{state | webrtc_connected?: true}
-
-    if state.webrtc_tracks do
-      link_webrtc_legs(state.webrtc_tracks, state)
-    else
-      {[], state}
+  def handle_info(:webrtc_heartbeat_tick, _ctx, state) do
+    for {_peer, viewer} <- state.viewers, viewer.connected? do
+      Zer0Media.ViewerTracker.heartbeat(to_string(state.session_id), viewer.viewer_id)
     end
-  end
 
-  @impl true
-  def handle_child_notification(notification, :hls, _ctx, state) do
-    Membrane.Logger.info("LIVEPIPE HLS sink notification: #{inspect(notification)}")
+    Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
     {[], state}
   end
 
   @impl true
+  def handle_child_notification(notification, {:webrtc, peer}, _ctx, state) do
+    case state.viewers[peer] do
+      nil ->
+        {[], state}
+
+      viewer ->
+        viewer =
+          case notification do
+            {:new_tracks, tracks} ->
+              %{viewer | tracks: tracks}
+
+            :connected ->
+              Zer0Media.ViewerTracker.heartbeat(to_string(state.session_id), viewer.viewer_id)
+              %{viewer | connected?: true}
+
+            _ ->
+              viewer
+          end
+
+        link_webrtc_legs(peer, put_in(state.viewers[peer], viewer))
+    end
+  end
+
   def handle_child_notification(_notification, _child, _ctx, state), do: {[], state}
 
-  # ── Viewer heartbeat (WebRTC) ─────────────────────────────────────────────
+  defp link_webrtc_legs(peer, state) do
+    viewer = state.viewers[peer]
 
-  @impl true
-  def handle_info(:webrtc_heartbeat_tick, _ctx, state) do
-    if state.webrtc_viewer_id && state.session_id do
-      Zer0Media.ViewerTracker.heartbeat(to_string(state.session_id), state.webrtc_viewer_id)
-    end
-
-    timer = Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
-    {[], %{state | webrtc_heartbeat_timer: timer}}
-  end
-
-  defp start_webrtc_heartbeat(%{webrtc_viewer_id: nil} = state) do
-    # Prefer the viewer_id the browser's WebRTC signaling WebSocket connected
-    # with (derived from the same playback token as HLS, see
-    # Zer0Media.WebRTCSignalingRegistry) so a viewer who is briefly on both
-    # transports (e.g. HLS fallback while WebRTC reconnects) is counted once,
-    # not twice. Fall back to a random id only if none was recorded (e.g. a
-    # signaling client that didn't send a token/viewer_id).
-    viewer_id =
-      (state.session_id && Zer0Media.WebRTCSignalingRegistry.get_viewer_id(state.session_id)) ||
-        (:crypto.strong_rand_bytes(16) |> Base.url_encode64())
-
-    timer = Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
-
-    if state.session_id do
-      Zer0Media.ViewerTracker.heartbeat(to_string(state.session_id), viewer_id)
-    end
-
-    %{state | webrtc_viewer_id: viewer_id, webrtc_heartbeat_timer: timer}
-  end
-
-  defp start_webrtc_heartbeat(state), do: state
-
-  defp stop_webrtc_heartbeat(state) do
-    if state.webrtc_heartbeat_timer, do: Process.cancel_timer(state.webrtc_heartbeat_timer)
-    %{state | webrtc_heartbeat_timer: nil}
-  end
-
-  defp link_webrtc_legs(tracks, state) do
-    {spec, state} =
-      Enum.reduce(tracks, {[], state}, fn %{kind: kind, id: id}, {spec, state} ->
-        case {kind, state} do
-          {:audio, %{webrtc_audio_linked?: false}} ->
+    {spec, viewer} =
+      Enum.reduce(if(viewer.connected?, do: viewer.tracks, else: []), {[], viewer}, fn %{
+                                                                                         kind:
+                                                                                           kind,
+                                                                                         id: id
+                                                                                       },
+                                                                                       {spec,
+                                                                                        viewer} ->
+        case {kind, viewer} do
+          {:audio, %{audio_linked?: false}} ->
             leg =
               get_child(:audio_tee)
-              |> via_out(Pad.ref(:secondary, :webrtc))
-              |> child(:audio_parser_webrtc, %AAC.Parser{out_encapsulation: :ADTS})
-              |> child(:aac_decoder, AAC.FDK.Decoder)
-              |> child(:opus_encoder, %Opus.Encoder{})
+              |> via_out(Pad.ref(:secondary, peer))
+              |> child({:audio_parser_webrtc, peer}, %AAC.Parser{out_encapsulation: :ADTS})
+              |> child({:aac_decoder, peer}, AAC.FDK.Decoder)
+              |> child({:opus_encoder, peer}, %Opus.Encoder{})
               |> via_in(Pad.ref(:input, id), options: [kind: :audio])
-              |> get_child(:webrtc)
+              |> get_child({:webrtc, peer})
 
-            {[{leg, group: :webrtc_output, crash_group_mode: :temporary} | spec],
-             %{state | webrtc_audio_linked?: true}}
+            {[leg | spec], %{viewer | audio_linked?: true}}
 
-          {:video, %{webrtc_video_linked?: false}} ->
+          {:video, %{video_linked?: false}} ->
             leg =
               get_child(:video_tee)
-              |> via_out(Pad.ref(:secondary, :webrtc))
-              |> child(:video_to_annexb, %H264.Parser{
+              |> via_out(Pad.ref(:secondary, peer))
+              |> child({:video_to_annexb, peer}, %H264.Parser{
                 output_stream_structure: :annexb,
                 output_alignment: :nalu,
                 repeat_parameter_sets: true
               })
               |> via_in(Pad.ref(:input, id), options: [kind: :video])
-              |> get_child(:webrtc)
+              |> get_child({:webrtc, peer})
 
-            {[{leg, group: :webrtc_output, crash_group_mode: :temporary} | spec],
-             %{state | webrtc_video_linked?: true}}
+            {[leg | spec], %{viewer | video_linked?: true}}
 
-          _other ->
-            {spec, state}
+          _ ->
+            {spec, viewer}
         end
       end)
 
-    if spec == [] do
-      {[], state}
+    actions =
+      if spec == [],
+        do: [],
+        else: [spec: {spec, group: {:webrtc_output, peer}, crash_group_mode: :temporary}]
+
+    {actions, put_in(state.viewers[peer], viewer)}
+  end
+
+  defp forget_viewer(peer, state) do
+    {viewer, viewers} = Map.pop(state.viewers, peer)
+    if viewer, do: Process.demonitor(viewer.monitor, [:flush])
+    %{state | viewers: viewers}
+  end
+
+  defp remove_viewer(peer, state) do
+    if Map.has_key?(state.viewers, peer) do
+      {[remove_children: {:webrtc_output, peer}], forget_viewer(peer, state)}
     else
-      {[spec: spec], %{state | webrtc_tracks: nil}}
+      {[], state}
     end
   end
 
-  # ── Crash isolation ────────────────────────────────────────────────────────
-
   @impl true
-  def handle_crash_group_down(:webrtc_output, _ctx, state) do
-    Membrane.Logger.warning("WebRTC output group went down — restarting")
-    restart_webrtc(state)
-  end
-
-  # ExWebRTCSink/PeerConnection exits with reason :normal (not a crash) once ICE
-  # gives up on a connection (e.g. after "Requested ICE agent to move to the
-  # failed state"). A :normal exit does NOT trigger handle_crash_group_down
-  # (Membrane only detonates/rebuilds a crash group on an abnormal reason), so
-  # without this clause the webrtc child (and its linked signaling process)
-  # would silently disappear forever, leaving the viewer's WebRTC WebSocket
-  # 404-ing on every reconnect attempt with no server-side log at all.
-  @impl true
-  def handle_child_terminated(:webrtc, %{exit_reason: :normal}, state) do
-    Membrane.Logger.warning("WebRTC child exited normally (ICE gave up) — restarting")
-    restart_webrtc(state)
+  def handle_crash_group_down({:webrtc_output, peer}, _ctx, state) do
+    {[], forget_viewer(peer, state)}
   end
 
   @impl true
+  def handle_child_terminated({:webrtc, peer}, %{exit_reason: :normal} = ctx, state) do
+    remaining = for {name, %{group: {:webrtc_output, ^peer}}} <- ctx.children, do: name
+    actions = if remaining == [], do: [], else: [remove_children: remaining]
+    {actions, forget_viewer(peer, state)}
+  end
+
   def handle_child_terminated(_child, _ctx, state), do: {[], state}
-
-  defp restart_webrtc(state) do
-    # Stop the old viewer heartbeat (viewer will get a new one on reconnect).
-    state = stop_webrtc_heartbeat(state)
-
-    spec =
-      {child(:webrtc, %Zer0Media.WebRTCBin{
-         session_id: state.session_id,
-         video_codec: [:h264],
-         ice_ip_filter: &__MODULE__.ice_ip_filter/1
-       }), group: :webrtc_output, crash_group_mode: :temporary}
-
-    {[spec: spec, notify_child: {:webrtc, {:add_tracks, [:audio, :video]}}],
-     %{state | webrtc_tracks: nil, webrtc_connected?: false, webrtc_audio_linked?: false,
-               webrtc_video_linked?: false, webrtc_viewer_id: nil}}
-  end
 
   # ── End-of-stream / cleanup ────────────────────────────────────────────────
 
@@ -269,8 +236,8 @@ defmodule Zer0Media.LivePipeline do
   def ice_ip_filter({127, _, _, _}), do: true
   def ice_ip_filter({169, 254, _, _}), do: false
   def ice_ip_filter({0, 0, 0, 0, 0, 0, 0, 1}), do: true
-  def ice_ip_filter({0xfe, 0x80, _, _, _, _, _, _}), do: false
-  def ice_ip_filter({0xff, _, _, _, _, _, _, _}), do: false
+  def ice_ip_filter({0xFE, 0x80, _, _, _, _, _, _}), do: false
+  def ice_ip_filter({0xFF, _, _, _, _, _, _, _}), do: false
   def ice_ip_filter(_ip), do: true
 
   # ── Helpers ────────────────────────────────────────────────────────────────

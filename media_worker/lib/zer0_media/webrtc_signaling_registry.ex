@@ -1,115 +1,38 @@
 defmodule Zer0Media.WebRTCSignalingRegistry do
-  @moduledoc """
-  Maps a `session_id` to its `Membrane.WebRTC.Signaling` channel so the shared
-  HTTP origin (`HLSRouter`, port 8080) can route a viewer's WebSocket
-  connection at `/webrtc/<session_id>` to the right signaling relay.
-
-  Each live pipeline session registers its signaling here when it starts and
-  overwrites it on restart. The WebSock handler guards on `Process.alive?/1`
-  so a stale entry pointing at a dead signaling is treated as "not found".
-  """
+  @moduledoc "Maps live session IDs to their pipelines, with monitored cleanup."
   use GenServer
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc "Registers (or overwrites) the signaling channel for a session."
-  def register(session_id, signaling) do
-    GenServer.call(__MODULE__, {:register, session_id, signaling})
+  def register(session_id, pipeline) do
+    GenServer.call(__MODULE__, {:register, session_id, pipeline})
   end
 
-  @doc "Looks up the signaling channel for a session, or nil if absent/dead."
-  def lookup(session_id) do
-    case GenServer.call(__MODULE__, {:lookup, session_id}) do
-      %{pid: pid} = signaling when is_pid(pid) ->
-        if Process.alive?(pid), do: signaling, else: nil
+  def lookup(session_id), do: GenServer.call(__MODULE__, {:lookup, session_id})
 
-      _ ->
-        nil
-    end
+  @impl true
+  def init(_opts), do: {:ok, %{}}
+
+  @impl true
+  def handle_call({:register, id, pid}, _from, state) do
+    if entry = state[id], do: Process.demonitor(elem(entry, 1), [:flush])
+    {:reply, :ok, Map.put(state, id, {pid, Process.monitor(pid)})}
   end
 
-  @doc "Removes the signaling channel for a session."
-  def unregister(session_id) do
-    GenServer.call(__MODULE__, {:unregister, session_id})
-  end
+  def handle_call({:lookup, id}, _from, state) do
+    pid =
+      case state[id] do
+        {pid, _ref} -> if Process.alive?(pid), do: pid
+        nil -> nil
+      end
 
-  @doc """
-  Records the viewer_id (derived from the same playback token used for HLS)
-  for the viewer currently connecting to a session's WebRTC signaling socket.
-
-  This lets `Zer0Media.LivePipeline`'s WebRTC heartbeat use the SAME viewer_id
-  the viewer's HLS requests would use, so a viewer who is briefly on both
-  transports (e.g. HLS fallback while WebRTC reconnects) is counted once
-  instead of twice.
-  """
-  def set_viewer_id(session_id, viewer_id) do
-    GenServer.call(__MODULE__, {:set_viewer_id, session_id, viewer_id})
-  end
-
-  @doc "Looks up the viewer_id recorded for a session, or nil if absent."
-  def get_viewer_id(session_id) do
-    GenServer.call(__MODULE__, {:get_viewer_id, session_id})
-  end
-
-  @doc """
-  Atomically claims the single WebRTC viewer slot for a session.
-
-  `Membrane.WebRTC.Signaling` only supports exactly one non-element peer at a
-  time — a second `register_peer` call raises (crashing the shared Signaling
-  process, kicking out the first viewer, and potentially cascading into a
-  full pipeline crash on repeated attempts). Callers must claim the slot
-  here BEFORE calling `register_peer`, and release it on disconnect.
-  """
-  def claim_viewer(session_id) do
-    GenServer.call(__MODULE__, {:claim_viewer, session_id})
-  end
-
-  @doc "Releases the viewer slot claimed via `claim_viewer/1`."
-  def release_viewer(session_id) do
-    GenServer.call(__MODULE__, {:release_viewer, session_id})
+    {:reply, pid, state}
   end
 
   @impl true
-  def init(_opts), do: {:ok, %{signalings: %{}, viewer_ids: %{}, claimed: MapSet.new()}}
-
-  @impl true
-  def handle_call({:register, session_id, signaling}, _from, state) do
-    {:reply, :ok, put_in(state.signalings[session_id], signaling)}
-  end
-
-  def handle_call({:lookup, session_id}, _from, state) do
-    {:reply, Map.get(state.signalings, session_id), state}
-  end
-
-  def handle_call({:unregister, session_id}, _from, state) do
-    state =
-      state
-      |> update_in([:signalings], &Map.delete(&1, session_id))
-      |> update_in([:viewer_ids], &Map.delete(&1, session_id))
-      |> update_in([:claimed], &MapSet.delete(&1, session_id))
-
-    {:reply, :ok, state}
-  end
-
-  def handle_call({:claim_viewer, session_id}, _from, state) do
-    if MapSet.member?(state.claimed, session_id) do
-      {:reply, {:error, :occupied}, state}
-    else
-      {:reply, :ok, update_in(state.claimed, &MapSet.put(&1, session_id))}
-    end
-  end
-
-  def handle_call({:release_viewer, session_id}, _from, state) do
-    {:reply, :ok, update_in(state.claimed, &MapSet.delete(&1, session_id))}
-  end
-
-  def handle_call({:set_viewer_id, session_id, viewer_id}, _from, state) do
-    {:reply, :ok, put_in(state.viewer_ids[session_id], viewer_id)}
-  end
-
-  def handle_call({:get_viewer_id, session_id}, _from, state) do
-    {:reply, Map.get(state.viewer_ids, session_id), state}
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+    {:noreply, Map.reject(state, fn {_id, {_pid, monitor}} -> monitor == ref end)}
   end
 end
