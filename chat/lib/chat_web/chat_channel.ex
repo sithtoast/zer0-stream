@@ -2,6 +2,7 @@ defmodule ChatWeb.ChatChannel do
   use ChatWeb, :channel
 
   alias Chat.Messages
+  alias ChatWeb.Presence
 
   @max_message_length 500
   @max_messages_per_window 10
@@ -20,10 +21,22 @@ defmodule ChatWeb.ChatChannel do
       |> assign(:broadcaster_id, broadcaster_id)
       |> assign(:message_timestamps, [])
 
+    send(self(), :after_join)
     {:ok, %{messages: Enum.map(messages, &message_payload(&1, broadcaster_id))}, socket}
   end
 
   def join(_topic, _params, _socket), do: {:error, %{reason: "invalid_channel"}}
+
+  @impl true
+  def handle_info(:after_join, socket) do
+    {:ok, _ref} =
+      Presence.track(socket, socket.assigns.user.id, %{
+        display_name: socket.assigns.user.display_name
+      })
+
+    push(socket, "presence_state", Presence.list(socket))
+    {:noreply, socket}
+  end
 
   @impl true
   def handle_in("message", %{"body" => body}, socket) when is_binary(body) do

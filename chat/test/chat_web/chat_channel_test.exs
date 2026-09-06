@@ -24,6 +24,62 @@ defmodule ChatWeb.ChatChannelTest do
     assert socket.assigns.channel_id == "test-channel"
   end
 
+  test "tracks quiet room members and broadcasts their departure", %{socket: socket} do
+    Process.flag(:trap_exit, true)
+    assert_push "presence_state", %{"user-1" => %{metas: [%{display_name: "Ada"} | _]}}
+
+    {:ok, _, quiet_socket} =
+      socket(ChatWeb.UserSocket, "quiet-socket", %{user: %{id: "quiet", display_name: "Quiet"}})
+      |> subscribe_and_join(ChatWeb.ChatChannel, socket.topic)
+
+    assert_broadcast "presence_diff",
+                     %{joins: %{"quiet" => %{metas: [%{display_name: "Quiet"}]}}},
+                     1_000
+
+    assert Messages.recent(socket.assigns.channel_id) == []
+
+    ref = leave(quiet_socket)
+    assert_reply ref, :ok
+    assert_broadcast "presence_diff", %{leaves: %{"quiet" => %{metas: [_]}}}, 1_000
+    refute Map.has_key?(ChatWeb.Presence.list(socket), "quiet")
+  end
+
+  test "presence is scoped to the room and retains other connections", %{socket: socket} do
+    Process.flag(:trap_exit, true)
+    assert_push "presence_state", %{"user-1" => _}
+
+    {:ok, _, second_tab} =
+      socket(ChatWeb.UserSocket, "second-tab", %{user: %{id: "multi", display_name: "Multi"}})
+      |> subscribe_and_join(ChatWeb.ChatChannel, socket.topic)
+
+    assert_broadcast "presence_diff", %{joins: %{"multi" => _}}, 1_000
+
+    {:ok, _, third_tab} =
+      socket(ChatWeb.UserSocket, "third-tab", %{user: %{id: "multi", display_name: "Multi"}})
+      |> subscribe_and_join(ChatWeb.ChatChannel, socket.topic)
+
+    assert_broadcast "presence_diff", %{joins: %{"multi" => _}}, 1_000
+    assert %{metas: [_, _]} = ChatWeb.Presence.list(socket)["multi"]
+
+    {:ok, _, other_room} =
+      socket(ChatWeb.UserSocket, "other-room", %{user: %{id: "other", display_name: "Other"}})
+      |> subscribe_and_join(ChatWeb.ChatChannel, "chat:other-room")
+
+    assert_push "presence_state", %{"other" => _}
+    refute Map.has_key?(ChatWeb.Presence.list(socket), "other")
+    refute Map.has_key?(ChatWeb.Presence.list(other_room), "multi")
+
+    ref = leave(second_tab)
+    assert_reply ref, :ok
+    assert_broadcast "presence_diff", %{leaves: %{"multi" => _}}, 1_000
+    assert %{metas: [_]} = ChatWeb.Presence.list(socket)["multi"]
+
+    ref = leave(third_tab)
+    assert_reply ref, :ok
+    assert_broadcast "presence_diff", %{leaves: %{"multi" => _}}, 1_000
+    refute Map.has_key?(ChatWeb.Presence.list(socket), "multi")
+  end
+
   test "persists and broadcasts messages", %{socket: socket} do
     push(socket, "message", %{"body" => "hello"})
     assert_push "message", %{body: "hello", channel_id: "test-channel"}
