@@ -39,11 +39,15 @@ defmodule ChatWeb.ChatChannel do
   end
 
   @impl true
-  def handle_in("message", %{"body" => body}, socket) when is_binary(body) do
+  def handle_in("message", %{"body" => body} = params, socket) when is_binary(body) do
     body = String.trim(body)
+    gif_slug = params["gif_slug"]
 
     cond do
-      body == "" ->
+      not valid_gif_slug?(gif_slug) ->
+        {:reply, {:error, %{reason: "invalid_gif"}}, socket}
+
+      body == "" and is_nil(gif_slug) ->
         {:reply, {:error, %{reason: "empty_message"}}, socket}
 
       String.length(body) > @max_message_length ->
@@ -59,7 +63,8 @@ defmodule ChatWeb.ChatChannel do
               channel_id: socket.assigns.channel_id,
               sender_id: socket.assigns.user.id,
               sender_display_name: socket.assigns.user.display_name,
-              body: body
+              body: body,
+              gif_slug: gif_slug
             }
 
             case Messages.create_message(attrs) do
@@ -80,6 +85,13 @@ defmodule ChatWeb.ChatChannel do
     {:reply, {:error, %{reason: "invalid_message"}}, socket}
   end
 
+  defp valid_gif_slug?(nil), do: true
+
+  defp valid_gif_slug?(slug) when is_binary(slug) and byte_size(slug) in 1..200,
+    do: Regex.match?(~r/\A[a-zA-Z0-9_-]+\z/, slug)
+
+  defp valid_gif_slug?(_), do: false
+
   defp allow_message?(socket) do
     now = System.monotonic_time(:millisecond)
 
@@ -98,6 +110,7 @@ defmodule ChatWeb.ChatChannel do
     %{
       id: message.id,
       body: message.body,
+      gif_slug: message.gif_slug,
       channel_id: message.channel_id,
       first_message: message.first_message,
       is_broadcaster: message.sender_id == broadcaster_id,

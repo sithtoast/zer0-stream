@@ -112,4 +112,47 @@ defmodule ChatWeb.ChatChannelTest do
     ref = push(socket, "message", %{"body" => "blocked"})
     assert_reply ref, :error, %{reason: "rate_limited"}
   end
+
+  test "persists GIF-only messages and includes them in reconnect history", %{socket: socket} do
+    ref = push(socket, "message", %{"body" => "", "gif_slug" => "hello-hi-662"})
+    assert_reply ref, :ok, %{gif_slug: "hello-hi-662"}
+    assert_push "message", %{gif_slug: "hello-hi-662", first_message: true}
+    assert [%{body: nil, gif_slug: "hello-hi-662"}] = Messages.recent("test-channel")
+
+    {:ok, %{messages: [message]}, _} =
+      socket(ChatWeb.UserSocket, "reconnect", %{user: %{id: "user-2", display_name: "Bob"}})
+      |> subscribe_and_join(ChatWeb.ChatChannel, "chat:test-channel")
+
+    assert message.gif_slug == "hello-hi-662"
+  end
+
+  test "preserves captions and rejects malformed GIF identifiers", %{socket: socket} do
+    ref = push(socket, "message", %{"body" => "hello @Ada", "gif_slug" => "hello-hi-662"})
+    assert_reply ref, :ok, %{body: "hello @Ada", gif_slug: "hello-hi-662"}
+
+    for slug <- [
+          "",
+          "https://evil.test/a.gif",
+          "../x",
+          "hi\n",
+          %{},
+          123,
+          String.duplicate("a", 201)
+        ] do
+      ref = push(socket, "message", %{"body" => "caption", "gif_slug" => slug})
+      assert_reply ref, :error, %{reason: "invalid_gif"}
+    end
+
+    assert length(Messages.recent("test-channel")) == 1
+  end
+
+  test "GIFs share the message rate limit", %{socket: socket} do
+    for _ <- 1..10 do
+      ref = push(socket, "message", %{"body" => "", "gif_slug" => "hello"})
+      assert_reply ref, :ok
+    end
+
+    ref = push(socket, "message", %{"body" => "", "gif_slug" => "hello"})
+    assert_reply ref, :error, %{reason: "rate_limited"}
+  end
 end
