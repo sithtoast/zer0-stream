@@ -22,7 +22,8 @@ defmodule Zer0Media.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:membrane_rtmp_plugin, "~> 0.29.5"},
+      # Isolate malformed RTMP clients from the listener (see vendor patch notes).
+      {:membrane_rtmp_plugin, path: "vendor/membrane_rtmp_plugin", override: true},
       {:membrane_http_adaptive_stream_plugin, "~> 0.20"},
       {:membrane_webrtc_plugin, "~> 0.26"},
       {:membrane_tee_plugin, "~> 0.12"},

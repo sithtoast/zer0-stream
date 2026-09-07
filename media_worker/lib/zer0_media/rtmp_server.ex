@@ -18,7 +18,7 @@ defmodule Zer0Media.RTMPServer do
 
   def handle_new_client(client_ref, _app, stream_key) do
     connection_id = connection_id()
-    Logger.info("Incoming RTMP connection #{connection_id} stream_key=#{stream_key}")
+    Logger.info("Incoming RTMP connection #{connection_id}")
 
     case ControlPlane.authorize(stream_key, connection_id) do
       {:ok, session} ->
@@ -88,7 +88,11 @@ defmodule Zer0Media.RTMPServer do
             "WebRTC signaling at #{signaling_url}"
         )
 
-        ControlPlane.report_webrtc(session_id, signaling_url, Zer0Media.TURN.browser_ice_servers())
+        ControlPlane.report_webrtc(
+          session_id,
+          signaling_url,
+          Zer0Media.TURN.browser_ice_servers()
+        )
 
         {pipeline, nil}
 
