@@ -58,4 +58,6 @@ ENV MIX_ENV=prod \
 
 EXPOSE 1935 8080
 
-CMD ["mix", "run", "-e", "{:ok, _pid} = Zer0Media.RTMPServer.start_link(port: 1935); Process.sleep(:infinity)"]
+# Native dependencies are compiled in the builder. Path dependencies would be
+# compiled again by plain `mix run`, but the runtime has no build toolchain.
+CMD ["mix", "run", "--no-compile", "--no-deps-check", "-e", "{:ok, _pid} = Zer0Media.RTMPServer.start_link(port: 1935); Process.sleep(:infinity)"]
