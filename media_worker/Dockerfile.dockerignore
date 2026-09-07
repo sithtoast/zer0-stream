@@ -1,0 +1,11 @@
+.git
+**/deps
+**/_build
+**/.DS_Store
+**/erl_crash.dump
+**/c_src/**/_generated
+.mix*
+.hex*
+media_worker/priv/hls
+media_worker/priv/hls-boombox
+media_worker/priv/captures

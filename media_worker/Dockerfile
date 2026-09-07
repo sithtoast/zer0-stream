@@ -17,14 +17,18 @@ RUN mix local.hex --force && mix local.rebar --force
 RUN MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media \
     mix local.hex --force && \
     MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix local.rebar --force
-RUN cd /app/media_worker && MIX_ENV=prod MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix deps.get
+RUN cd /app/media_worker && MIX_ENV=prod MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix deps.get --check-locked
 RUN MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox \
     mix local.hex --force && \
     MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix local.rebar --force
 RUN cd /app/boombox_runtime && MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix deps.get
 
-COPY media_worker ./media_worker
-COPY boombox_runtime ./boombox_runtime
+# Keep the lockfiles and dependencies from the fetch layers intact.
+# Broad project copies can overwrite them with host files before compilation.
+COPY media_worker/lib ./media_worker/lib
+COPY media_worker/priv/boombox_probe.exs ./media_worker/priv/boombox_probe.exs
+COPY media_worker/priv/static ./media_worker/priv/static
+COPY boombox_runtime/lib ./boombox_runtime/lib
 
 RUN cd /app/media_worker && MIX_ENV=prod MIX_HOME=/app/.mix-media HEX_HOME=/app/.hex-media mix compile
 RUN cd /app/boombox_runtime && MIX_ENV=prod MIX_HOME=/app/.mix-boombox HEX_HOME=/app/.hex-boombox mix compile
