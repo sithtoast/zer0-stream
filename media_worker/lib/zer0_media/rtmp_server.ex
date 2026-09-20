@@ -6,7 +6,7 @@ defmodule Zer0Media.RTMPServer do
   def start_link(opts \\ []) do
     ControlPlane.reconcile()
 
-    if boombox_mode?(), do: Zer0Media.BoomboxSession.prewarm()
+    if not live_pipeline_mode?() and boombox_mode?(), do: Zer0Media.BoomboxSession.prewarm()
 
     Membrane.RTMPServer.start_link(
       port: Keyword.get(opts, :port, Application.get_env(:zer0_media, :rtmp_port, 1935)),

@@ -35,7 +35,7 @@ when they drift. **Keep each one identical on every service that shares it.**
 | Var | Default | Notes |
 |---|---|---|
 | `LIVE_PIPELINE_MODE` | `false` | `true`/`1` = use the Membrane `LivePipeline` (HLS **and** WebRTC tee). **Required for WebRTC.** Otherwise Boombox mode is used. |
-| `LEGACY_HLS_MODE` | `false` | `true`/`1` = force Boombox mode. |
+| `LEGACY_HLS_MODE` | `false` | Legacy behavior: when LivePipeline is off, `true`/`1` bypasses Boombox and uses `BOOMBOX_RELAY_URL` if set. Does not override LivePipeline. |
 
 ### WebRTC / TURN
 
@@ -55,7 +55,9 @@ when they drift. **Keep each one identical on every service that shares it.**
 | `HLS_HTTP_PORT` | `8080` | HTTP port for the HLSRouter (also serves `/webrtc/<session>` signaling). |
 | `RTMP_PORT` | `1935` | RTMP ingest port. |
 | `HLS_DIR` | `priv/hls` | HLS output directory. |
-| `HLS_SEGMENT_DURATION` | `1` | HLS segment duration. |
+| `HLS_SEGMENT_DURATION_MS` | `1000` | LivePipeline segment target in milliseconds, converted with `Membrane.Time`. |
+| `LLHLS_PART_DURATION_MS` | `200` | Reserved LL-HLS part target in milliseconds; must not exceed the segment target. Does not enable partial output yet. |
+| `HLS_SEGMENT_DURATION` | — | Deprecated nanosecond alias; do not set alongside `HLS_SEGMENT_DURATION_MS`. Whole milliseconds required. |
 | `HLS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:4000` | CORS allowed origins for HLS. |
 | `RTMP_IDLE_TIMEOUT_MS` | `15000` | Idle RTMP timeout. |
 | `LOG_LEVEL` | `info` | Log level. |

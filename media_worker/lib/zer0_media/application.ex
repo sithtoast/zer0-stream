@@ -7,6 +7,7 @@ defmodule Zer0Media.Application do
 
   @impl true
   def start(_type, _args) do
+    Zer0Media.MediaConfig.configure!()
     Logger.configure(level: log_level())
 
     children = [

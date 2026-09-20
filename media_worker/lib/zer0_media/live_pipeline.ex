@@ -25,7 +25,7 @@ defmodule Zer0Media.LivePipeline do
 
     source = Keyword.get(opts, :source, %RTMP.SourceBin{client_ref: client_ref})
 
-    seg_dur = configured_segment_duration()
+    seg_dur = Zer0Media.MediaConfig.timing().segment_duration
     video_scale = configured_rate(:video_timestamp_scale, 1.0)
     audio_rate = configured_rate(:aac_timestamp_rate, 1.0)
 
@@ -252,13 +252,6 @@ defmodule Zer0Media.LivePipeline do
   def ice_ip_filter(_ip), do: true
 
   # ── Helpers ────────────────────────────────────────────────────────────────
-
-  defp configured_segment_duration do
-    case System.get_env("HLS_SEGMENT_DURATION") do
-      nil -> Membrane.Time.seconds(1)
-      val -> String.to_integer(val)
-    end
-  end
 
   defp configured_rate(key, default) do
     value =
