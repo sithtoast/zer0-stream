@@ -1,0 +1,99 @@
+# LL-HLS testing only: existing dc macvlan addresses belong to zer0-stream-testing.
+# Git reference: refs/heads/codex/llhls-foundation.
+# Pin LLHLS_IMAGE_TAG to llhls-<full commit SHA> for a reproducible deployment.
+services:
+  app:
+    image: sithtoast/zer0-stream:${LLHLS_IMAGE_TAG:-llhls-foundation}
+    environment:
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE is required}
+      PHX_HOST: ${PHX_HOST:?PHX_HOST is required}
+      LLHLS_PLAYBACK_ENABLED: "true"
+      PLAYBACK_BASE_URL: ${PLAYBACK_BASE_URL:?PLAYBACK_BASE_URL is required}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?PLAYBACK_TOKEN_SECRET is required}
+      MAIN_APP_AUTH_SECRET: ${MAIN_APP_AUTH_SECRET:?MAIN_APP_AUTH_SECRET is required}
+      CONTROL_PLANE_AUTH_SECRET: ${CONTROL_PLANE_AUTH_SECRET:?CONTROL_PLANE_AUTH_SECRET is required}
+      # These must be set (in the stack's .env file) — making them required
+      # means a refresh can't silently blank them and quietly break webhooks /
+      # viewer metrics.
+      MEDIA_WORKER_URL: http://${TEST_MEDIA_IP:-192.168.1.9}:8080
+      LIFECYCLE_WEBHOOK_URL: ${LIFECYCLE_WEBHOOK_URL:?LIFECYCLE_WEBHOOK_URL is required}
+      LIFECYCLE_WEBHOOK_SECRET: ${LIFECYCLE_WEBHOOK_SECRET:?LIFECYCLE_WEBHOOK_SECRET is required}
+      PORT: ${PORT:-4000}
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+      DB_STARTUP_RETRIES: ${DB_STARTUP_RETRIES:-30}
+      DB_STARTUP_DELAY: ${DB_STARTUP_DELAY:-2}
+    healthcheck:
+      test: ["CMD-SHELL", "elixir -e 'Application.ensure_all_started(:inets); case :httpc.request(~c\"http://127.0.0.1:4000/api/ready\") do {:ok, {{_, 200, _}, _, _}} -> System.halt(0); _ -> System.halt(1) end'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      default:
+        ipv4_address: ${TEST_API_IP:-192.168.1.7}
+    restart: unless-stopped
+
+  chat:
+    image: ${TEST_CHAT_IMAGE:-sithtoast/zer0-stream-chat@sha256:5df857672a695c086aae39e0e730f799b7d4a1408c9169c80f443b2aff221981}
+    environment:
+      MIX_ENV: prod
+      PHX_SERVER: "true"
+      DATABASE_URL: ${CHAT_DATABASE_URL:?CHAT_DATABASE_URL is required}
+      SECRET_KEY_BASE: ${CHAT_SECRET_KEY_BASE:?CHAT_SECRET_KEY_BASE is required}
+      PHX_HOST: ${CHAT_PHX_HOST:?CHAT_PHX_HOST is required}
+      CHAT_TOKEN_SECRET: ${CHAT_TOKEN_SECRET:?CHAT_TOKEN_SECRET is required}
+      CHAT_ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-https://zer0.tv,https://www.zer0.tv}
+      PORT: 4100
+      AUTO_MIGRATE: ${CHAT_AUTO_MIGRATE:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "elixir -e 'Application.ensure_all_started(:inets); case :httpc.request(~c\"http://127.0.0.1:4100/health\") do {:ok, {{_, 200, _}, _, _}} -> System.halt(0); _ -> System.halt(1) end'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      default:
+        ipv4_address: ${TEST_CHAT_IP:-192.168.1.8}
+    restart: unless-stopped
+
+  media_worker:
+    image: sithtoast/zer0-stream-media:${LLHLS_IMAGE_TAG:-llhls-foundation}
+    environment:
+      MIX_ENV: prod
+      LIVE_PIPELINE_MODE: "true"
+      LLHLS_ENABLED: "true"
+      HLS_SEGMENT_DURATION_MS: "1000"
+      LLHLS_PART_DURATION_MS: "200"
+      LLHLS_TARGET_DURATION_MS: "6000"
+      LLHLS_RETENTION_MS: "60000"
+      LLHLS_MAX_WAITERS: "5000"
+      HLS_HTTP_PORT: "8080"
+      WEBRTC_PUBLIC_URL_TEMPLATE: ${WEBRTC_PUBLIC_URL_TEMPLATE:?WEBRTC_PUBLIC_URL_TEMPLATE is required}
+      TURN_URL: ${WORKER_TURN_URL:-turn:192.168.1.1:3478?transport=udp}
+      TURN_PUBLIC_URL: ${TURN_PUBLIC_URL:-turn:199.193.114.34:3478?transport=udp,turn:199.193.114.34:3478?transport=tcp}
+      TURN_SECRET: ${TURN_SECRET:?TURN_SECRET is required}
+      CONTROL_PLANE_URL: http://${TEST_API_IP:-192.168.1.7}:${PORT:-4000}
+      CONTROL_PLANE_AUTH_SECRET: ${CONTROL_PLANE_AUTH_SECRET:?CONTROL_PLANE_AUTH_SECRET is required}
+      VIEWER_TTL_SECONDS: ${VIEWER_TTL_SECONDS:-30}
+      HLS_ALLOWED_ORIGINS: ${HLS_ALLOWED_ORIGINS:?HLS_ALLOWED_ORIGINS is required}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?PLAYBACK_TOKEN_SECRET is required}
+    depends_on:
+      - app
+    healthcheck:
+      test: ["CMD-SHELL", "elixir -e 'Application.ensure_all_started(:inets); case :httpc.request(~c\"http://127.0.0.1:8080/health\") do {:ok, {{_, 200, _}, _, _}} -> System.halt(0); _ -> System.halt(1) end'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      default:
+        ipv4_address: ${TEST_MEDIA_IP:-192.168.1.9}
+    restart: unless-stopped
+
+networks:
+  default:
+    name: dc
+    external: true

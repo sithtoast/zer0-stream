@@ -4,6 +4,39 @@ The existing LivePipeline can now produce and serve real CMAF partial segments.
 This remains opt-in. The companion frontend now offers an explicit experimental LL-HLS choice; no
 public server, proxy or deployment has been changed by this implementation.
 
+## Portainer testing stack
+
+`Publish LL-HLS Testing Images` builds the API and worker on pushes to
+`codex/llhls-foundation`. It publishes `llhls-foundation` and immutable
+`llhls-<full commit SHA>` tags. It never publishes `latest` or calls a deployment
+webhook. The existing production publishing workflows are separate; do not
+manually dispatch them to deploy this branch.
+
+Use `zer0_stream/docker-compose.llhls-testing.yml` for `zer0-stream-testing`.
+For a Git-managed stack use repository `https://github.com/sithtoast/zer0-stream`,
+reference `refs/heads/codex/llhls-foundation`, and that Compose path. For an
+existing editor-managed stack, paste the same file into its editor and preserve
+its environment values. Wait for both images to build before redeploying and
+select **Re-pull image**; pin `LLHLS_IMAGE_TAG=llhls-<full commit SHA>` when desired.
+
+This file explicitly enables all three opt-ins (`LIVE_PIPELINE_MODE`,
+`LLHLS_ENABLED`, `LLHLS_PLAYBACK_ENABLED`) plus the timing/retention limits below.
+It is specific to the existing test macvlan network `dc`, preserving API `.7`,
+chat `.8`, and worker `.9` on `192.168.1.0/24`. It uses those explicit addresses
+for service calls because production shares this network and service aliases.
+Existing test database and signing secrets remain Portainer environment values.
+Chat is pinned to its pre-LL-HLS image; updating it is a separate operation.
+The worker's internal/public TURN endpoints and WebRTC URL are preserved.
+
+Keep `PLAYBACK_BASE_URL=https://stream.dev.zer0.tv`,
+`HLS_ALLOWED_ORIGINS=https://dev.zer0.tv`, and the matching frontend backend
+configuration. The proxy must route `/llhls` to the worker, preserve authorization
+and delivery query parameters, and support the blocking timeouts below. A branch
+reference alone does not enable LL-HLS and production Compose still uses `latest`.
+The companion `codex/llhls-frontend` frontend must also be deployed to expose the
+experimental playback choice. A healthy idle worker is not a live OBS acceptance
+result; verify an actual publisher and player after rollout.
+
 ## Enable on a test worker
 
 Set these variables before starting the worker through its existing entry point:
