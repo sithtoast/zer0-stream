@@ -32,6 +32,7 @@ defmodule Zer0Media.MixProject do
       {:req, "~> 0.5"},
       {:bandit, "~> 1.5"},
       {:plug, "~> 1.16"},
+      {:telemetry, "~> 1.3"},
       # Override transitive ex_ice ~> 0.13.0 pinned by ex_webrtc/membrane_webrtc_plugin:
       # 0.16.0 fixes a crash on TURN refresh_permission send errors
       # (handle_ex_turn_msg badmatch on {:error, :closed}) that was killing

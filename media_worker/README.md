@@ -26,18 +26,18 @@ The seed script uses `Zer0Stream.Streams`, which is not part of this Mix app.
 Then start this worker in a second terminal:
 
 ```sh
-mix zer0_media.dev
+LIVE_PIPELINE_MODE=true mix zer0_media.dev
 ```
 
 When the control plane uses a non-default local port, pass it explicitly:
 
 ```sh
-mix zer0_media.dev --control-plane-url http://localhost:4001
+LIVE_PIPELINE_MODE=true mix zer0_media.dev --control-plane-url http://localhost:4001
 ```
 
 This starts the HTTP server on port `8080` and the RTMP listener on port `1935`.
-It uses `dev` for both Mix applications by default. The first run prepares the
-sibling Boombox runtime automatically; no production compilation is required.
+It uses the `dev` Mix environment by default. With LivePipeline enabled, the
+legacy Boombox runtime is not prepared; no production compilation is required.
 It also uses the local control-plane secret already configured by
 `zer0_stream/config/dev.exs`; production still requires
 `CONTROL_PLANE_AUTH_SECRET`.
@@ -96,49 +96,28 @@ If audio/video segment groups fail to sync (`:vod` mode is strict and fails
 fast on packager errors), that is a sign the rate still needs adjustment for
 that publisher.
 
-The local smoke-test default uses thirty-second segments so it works with the
-current publisher's variable keyframe interval. The publisher's GOP length is
-not fixed and has been observed anywhere from roughly 4 to 9 seconds, so
-raising `HLS_SEGMENT_DURATION` above the last observed max is only a stopgap:
-a longer run can still produce a GOP that exceeds it and crash the strict
-`:vod` packager (`Segment duration ... exceeds target ... (RFC 8216
-violation)`).
+LivePipeline uses `Membrane.HTTPAdaptiveStream.SinkBin` in live mode, with
+separate audio/video CMAF playlists and a 20-second target window. Its segment
+target defaults to one second. Configure it with `HLS_SEGMENT_DURATION_MS`
+(e.g. `2000` for two seconds); use a fixed OBS keyframe interval compatible with
+the target. Actual video cuts still depend on publisher keyframes.
 
-The durable fix is to give OBS a fixed keyframe interval instead of variable:
-Settings → Output → Advanced mode → Streaming tab → Keyframe Interval `2`
-(seconds). With a fixed interval, run the worker with a matching segment
-duration, e.g. `HLS_SEGMENT_DURATION=4000000000`, and GOPs can no longer drift
-past the target. This also moves the pipeline toward the low-latency target
-segment size instead of the 8-30s workaround durations.
+Timing is validated at application startup. `LLHLS_PART_DURATION_MS` defaults to
+`200` and must not exceed the segment target, but does **not** enable partial
+output yet. The deprecated `HLS_SEGMENT_DURATION` variable still means
+nanoseconds (`4000000000` = four seconds); migrate it to
+`HLS_SEGMENT_DURATION_MS=4000`. Do not set both. Values must be positive whole
+milliseconds, at most 60 seconds.
 
-The legacy direct pipeline uses a sliding playlist (`{:sliding, max_segments,
-safety_delay}`) with `HLS_MAX_SEGMENTS=30` by default. It keeps a bounded
-window of recent segments instead of accumulating a full stream on local disk.
-The default Boombox path is also cleaned after each session, but its pinned
-packager does not yet expose a segment-window setting.
+Completed HLS artifacts are retained for 60 seconds by default
+(`HLS_CLEANUP_GRACE_MS`). Startup removes stale session directories, so this
+storage is not an archive. RTMP idle cleanup defaults to 15 seconds
+(`RTMP_IDLE_TIMEOUT_MS`) and handles publishers that omit `deleteStream`.
 
-Both worker paths keep completed HLS artifacts for 60 seconds by default, then
-remove the stream-session directory. Set `HLS_CLEANUP_GRACE_MS` to change that
-viewer grace period. On worker startup, stale `stream-session-*` directories
-are removed; local HLS storage is therefore not an archive or recording store.
-
-Some RTMP publishers send `FCUnpublish` without the `deleteStream` command.
-The worker treats a subsequent lack of media as the stream end and stops the
-session after 15 seconds by default. Set `RTMP_IDLE_TIMEOUT_MS` to tune this
-fallback; it triggers the same viewer and HLS cleanup path as a normal RTMP
-disconnect.
-
-The local pipeline uses non-strict synchronization rather than
-strict `:vod`. Measured audio drift is not a fixed clock-rate ratio: it comes
-from OBS's separate, unsynchronized audio/video capture threads, so it varies
-session to session and can't be fully cancelled by a single static
-`AAC_TIMESTAMP_RATE`. In strict `:vod` mode, any `track_timing_mismatch_at_sync`
-is fatal; in `:event`/`:sliding` mode the packager skips the offending sync
-point instead of crashing the pipeline (see `Membrane.HLS.SinkBin`'s
-timing-contract docs). `AAC_TIMESTAMP_RATE` is still worth tuning to reduce
-how often that happens, but it's no longer a hard requirement for the stream
-to stay up. `safety_delay` defaults to the configured `HLS_SEGMENT_DURATION`
-and can be overridden separately with `HLS_SAFETY_DELAY` (nanoseconds).
+For the LL-HLS state foundation, packaging decision, storage retention contract
+and next implementation slice, see [media architecture](../docs/media-architecture.md).
+Production still serves standard HLS until real part storage and blocking HTTP
+handlers are integrated.
 
 While the publisher is live, inspect the manifest and segments in that
 directory. A non-empty manifest with advancing segments is the first playback
@@ -147,8 +126,7 @@ path proof.
 ## Serving HLS over HTTP
 
 The worker starts an HTTP server (`Zer0Media.HLSRouter`, via Bandit) on
-startup that serves the same directory tree `Zer0Media.HLSPipeline` writes
-to. It listens on port `8080` by default; override with `HLS_HTTP_PORT`.
+startup that serves the directory tree written by `Zer0Media.LivePipeline`. It listens on port `8080` by default; override with `HLS_HTTP_PORT`.
 
 Playback URLs are rooted at `/hls/`, mirroring the on-disk layout:
 
@@ -205,7 +183,7 @@ it stops requesting HLS media for that interval. The live count is in-memory,
 approximate, and can lag a disconnect by up to the TTL.
 
 The worker identifies a playback client by deriving a stable `viewer_id` from
-the **playback token** (SHA-256 of the token), which is present on every request
+the **verified v2 playback token** (legacy tokens use SHA-256 of the token), which is present on every request
 in a playback session. This avoids generating a new viewer per request when the
 `SameSite=Lax` `zer0_viewer_id` cookie isn't sent back on cross-origin
 subresource requests (which previously inflated the count). Custom clients can
@@ -248,7 +226,10 @@ The **LivePipeline path above is the production path**. The Boombox path is
 legacy: it uses a supervised Boombox process per session and only produces HLS
 (no WebRTC). It is still the default when `LIVE_PIPELINE_MODE` is unset, and
 writes `priv/hls-boombox/stream-session-<session-id>.m3u8` served at
-`/hls-boombox/...`. Set `LEGACY_HLS_MODE=true` to force it explicitly.
+`/hls-boombox/...`. For Boombox, use `LIVE_PIPELINE_MODE=false` and leave `LEGACY_HLS_MODE` unset.
+Despite its name, `LEGACY_HLS_MODE=true` currently bypasses Boombox and uses
+`BOOMBOX_RELAY_URL` if configured; it does not override LivePipeline. These
+legacy semantics are preserved pending an explicit mode migration.
 
 Boombox lives in the sibling `boombox_runtime/` Mix app because its dependency
 graph is incompatible with the media worker's control-plane dependencies. The

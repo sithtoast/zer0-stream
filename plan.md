@@ -1,5 +1,8 @@
 # zer0-stream planning document
 
+This is the historical product plan. See [media architecture](docs/media-architecture.md)
+for the verified baseline, LL-HLS packaging decision and current implementation stages.
+
 ## Recommendation
 
 A separate repository is the correct boundary for the streaming backend. The current zer0.tv app is a discovery application with PostgreSQL-backed web access patterns and a different scaling profile from a live ingest and transcoding service. Keeping the streaming backend separate avoids deploy coupling, runtime coupling, and media dependency bloat.

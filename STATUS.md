@@ -1,7 +1,7 @@
 # zer0-stream — Status
 
 Living status of the streaming stack and frontend. Update this as things change.
-Last updated: 2026-09-02.
+Media sections updated: 2026-09-19. Other component status is historical.
 
 ## High-level
 
@@ -46,8 +46,11 @@ dev environment with a TURN relay. Creators choose delivery mode per channel.
 - **WHIP ingest** support.
 - **VOD / recording** to object storage.
 - **CDN-backed HLS origin** (currently served directly from the media worker).
-- **Multi-viewer WebRTC scaling** — current WebRTC sink serves one peer per
-  session; large WebRTC audiences need an SFU or per-viewer sinks.
+- **LL-HLS live integration** — pure state, playlist rendering, bounded waiting and
+  synthetic load tests exist; real CMAF publication and blocking HTTP are next.
+  See [media architecture](docs/media-architecture.md).
+- **WebRTC encoding efficiency** — peer isolation is implemented; AAC-to-Opus
+  still runs separately for each viewer.
 - **TURN-over-TLS** on port 5349.
 
 ## Known issues / caveats
@@ -57,7 +60,8 @@ dev environment with a TURN relay. Creators choose delivery mode per channel.
 - **LivePipeline HLS path** — `/hls/` (token-protected); Boombox legacy path is
   `/hls-boombox/`. The control plane picks the path based on whether WebRTC is
   active.
-- **WebRTC single-peer** — one WebRTC sink per session; fine for small audiences.
+- **WebRTC scaling** — per-viewer sinks/signaling are implemented; direct egress
+  and per-viewer audio encoding still grow with audience size.
 - **Third-party cookie / cross-origin** — viewer attribution now uses the playback
   token, so it's robust to cross-origin cookie blocking.
 

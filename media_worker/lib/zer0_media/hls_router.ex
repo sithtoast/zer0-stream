@@ -3,7 +3,7 @@ defmodule Zer0Media.HLSRouter do
   Serves HLS playlists, init segments, and media segments over HTTP.
 
   Files are served straight from the configured `:hls_dir` (default
-  `priv/hls`), the same directory `Zer0Media.HLSPipeline` writes to.
+  `priv/hls`), the same directory `Zer0Media.LivePipeline` writes to.
   """
 
   use Plug.Router

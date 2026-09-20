@@ -30,7 +30,8 @@ and owns live ingest, session state, and playback delivery.
 ## Docs
 
 - [`STATUS.md`](STATUS.md) — current status of the stack
-- [`plan.md`](plan.md) — architecture and rollout plan
+- [`docs/media-architecture.md`](docs/media-architecture.md) — current media architecture, LL-HLS foundation and next steps
+- [`plan.md`](plan.md) — historical architecture and rollout plan
 - [`webrtc.md`](webrtc.md) — WebRTC implementation notes and status (shared-origin
   signaling, TURN config)
 - [`ENV_VARS.md`](ENV_VARS.md) — per-component environment variables and the
@@ -43,6 +44,7 @@ database schema or application deployment lifecycle.
 
 ## Planned / not yet built
 
+- LL-HLS origin integration and real CMAF partial playback (state/coordinator foundation is implemented and tested)
 - WHIP ingest support
 - Object storage / recording for archived VOD
 - CDN-backed HLS origin (currently served directly from the media worker)
