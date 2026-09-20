@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refresh Mint to 1.10.1 and the native dependency provider to 0.2.4 so
+  the locked production dependency fetch succeeds for the LL-HLS test image.
+
 - Validate explicit millisecond segment/part timing at startup; preserve the old
   nanosecond segment variable as a deprecated compatibility alias.
 - Skip the unused Boombox prewarm when starting LivePipeline mode.
