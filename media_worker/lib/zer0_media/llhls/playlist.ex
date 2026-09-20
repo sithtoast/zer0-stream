@@ -3,7 +3,7 @@ defmodule Zer0Media.LLHLS.Playlist do
   Pure, per-rendition publication state. Durations are integer nanoseconds.
 
   A publisher announces a part only AFTER the complete immutable object is
-  readable. Segment completion likewise follows durable object publication.
+  readable. Segment completion likewise follows atomic object publication.
   Object names are relative to a unique stream-generation/rendition directory.
   This module neither packages media nor deletes expired objects.
   """
@@ -143,6 +143,19 @@ defmodule Zer0Media.LLHLS.Playlist do
 
       true ->
         :wait
+    end
+  end
+
+  @doc "Object requests wait only for the exact hinted part, never roll over to another URI."
+  def part_availability(state, msn, index) do
+    segment = Enum.find(state.segments, &(&1.msn == msn))
+
+    cond do
+      not valid_integer?(msn) or not valid_integer?(index) -> {:error, :invalid_request}
+      segment != nil and index < length(segment.parts) -> :ready
+      msn == state.next_msn and index < length(state.parts) -> :ready
+      msn == state.next_msn and index == length(state.parts) and not state.ended? -> :wait
+      true -> {:error, :not_found}
     end
   end
 

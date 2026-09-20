@@ -41,4 +41,31 @@ defmodule Zer0Media.MediaConfigTest do
       assert_raise ArgumentError, fn -> MediaConfig.load!(env) end
     end
   end
+
+  test "LL-HLS is explicitly enabled with bounded origin settings" do
+    timing = MediaConfig.load!(%{})
+    refute MediaConfig.load_llhls!(%{}, timing).enabled?
+    enabled = MediaConfig.load_llhls!(%{"LLHLS_ENABLED" => "true"}, timing)
+    assert enabled.enabled?
+    assert enabled.target_duration == Membrane.Time.seconds(6)
+    assert enabled.retention_ms == 60_000
+    assert enabled.max_waiters == 5000
+
+    for env <- [
+          %{"LLHLS_ENABLED" => "yes"},
+          %{"LLHLS_TARGET_DURATION_MS" => "1500"},
+          %{"LLHLS_TARGET_DURATION_MS" => "1000"},
+          %{"LLHLS_RETENTION_MS" => "47999"},
+          %{"LLHLS_MAX_WAITERS" => "100001"},
+          %{"LLHLS_PART_DURATION_MS" => "49"}
+        ] do
+      env = Map.merge(%{"LLHLS_ENABLED" => "true"}, env)
+      assert_raise ArgumentError, fn -> MediaConfig.load_llhls!(env, MediaConfig.load!(env)) end
+    end
+  end
+
+  test "disabled LL-HLS preserves long standard-HLS timing" do
+    timing = MediaConfig.load!(%{"HLS_SEGMENT_DURATION_MS" => "10000"})
+    refute MediaConfig.load_llhls!(%{}, timing).enabled?
+  end
 end

@@ -14,6 +14,8 @@ defmodule Zer0Media.Application do
       Zer0Media.BoomboxSessionSupervisor,
       Zer0Media.LivePipelineSupervisor,
       Zer0Media.HLSCleanup,
+      {Registry, keys: :unique, name: Zer0Media.LLHLS.Registry},
+      {DynamicSupervisor, strategy: :one_for_one, name: Zer0Media.LLHLS.Supervisor},
       Zer0Media.ViewerTracker,
       Zer0Media.ViewerMetricsReporter,
       Zer0Media.SessionTracker,

@@ -29,6 +29,20 @@ defmodule Zer0Media.LivePipeline do
     video_scale = configured_rate(:video_timestamp_scale, 1.0)
     audio_rate = configured_rate(:aac_timestamp_rate, 1.0)
 
+    llhls = Keyword.get(opts, :llhls, Zer0Media.MediaConfig.llhls())
+
+    {storage, origin_ref} =
+      if llhls.enabled? do
+        {:ok, origin} =
+          Zer0Media.LLHLS.Origin.start_generation(session_id, self(), output_dir, llhls)
+
+        {%Zer0Media.LLHLS.Storage{directory: output_dir, origin: origin}, Process.monitor(origin)}
+      else
+        {%HTTPAdaptiveStream.Storages.FileStorage{directory: output_dir}, nil}
+      end
+
+    part_duration = if llhls.enabled?, do: llhls.part_duration, else: nil
+
     structure = [
       # Audio: tee raw AAC → HLS (master) / WebRTC (linked on connect).
       child(:source, source)
@@ -38,7 +52,12 @@ defmodule Zer0Media.LivePipeline do
       |> child(:audio_parser_hls, %AAC.Parser{out_encapsulation: :none, output_config: :esds})
       |> child(:audio_normalizer, %Zer0Media.AudioTimestampNormalizer{rate: audio_rate})
       |> via_in(Pad.ref(:input, :audio),
-        options: [encoding: :AAC, segment_duration: seg_dur]
+        options: [
+          encoding: :AAC,
+          track_name: "audio",
+          segment_duration: seg_dur,
+          partial_segment_duration: part_duration
+        ]
       )
       |> get_child(:hls),
 
@@ -50,7 +69,12 @@ defmodule Zer0Media.LivePipeline do
       |> child(:video_tee, Zer0Media.BroadcastTee)
       |> via_out(:primary)
       |> via_in(Pad.ref(:input, :video),
-        options: [encoding: :H264, segment_duration: seg_dur]
+        options: [
+          encoding: :H264,
+          track_name: "video",
+          segment_duration: seg_dur,
+          partial_segment_duration: part_duration
+        ]
       )
       |> get_child(:hls),
 
@@ -58,7 +82,7 @@ defmodule Zer0Media.LivePipeline do
       child(:hls, %HTTPAdaptiveStream.SinkBin{
         manifest_name: "master",
         manifest_module: HTTPAdaptiveStream.HLS,
-        storage: %HTTPAdaptiveStream.Storages.FileStorage{directory: output_dir},
+        storage: storage,
         hls_mode: :separate_av,
         mode: :live,
         target_window_duration: Membrane.Time.seconds(20)
@@ -69,7 +93,13 @@ defmodule Zer0Media.LivePipeline do
     Process.send_after(self(), :webrtc_heartbeat_tick, 20_000)
 
     {[spec: structure],
-     %{parent: opts[:parent], output_dir: output_dir, session_id: session_id, viewers: %{}}}
+     %{
+       parent: opts[:parent],
+       output_dir: output_dir,
+       session_id: session_id,
+       viewers: %{},
+       origin_ref: origin_ref
+     }}
   end
 
   @impl true
@@ -99,6 +129,11 @@ defmodule Zer0Media.LivePipeline do
 
   def handle_info({:remove_webrtc_viewer, peer}, _ctx, state), do: remove_viewer(peer, state)
 
+  def handle_info({:llhls_failed, _generation}, _ctx, state), do: {[terminate: :shutdown], state}
+
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, _ctx, %{origin_ref: ref} = state),
+    do: {[terminate: :shutdown], state}
+
   def handle_info({:DOWN, ref, :process, peer, _reason}, _ctx, state) do
     case state.viewers[peer] do
       %{monitor: ^ref} -> remove_viewer(peer, state)
@@ -116,6 +151,11 @@ defmodule Zer0Media.LivePipeline do
   end
 
   @impl true
+  def handle_child_notification(:end_of_stream, :hls, _ctx, state) do
+    if is_pid(state.parent), do: send(state.parent, {:hls_complete, state.output_dir})
+    {[terminate: :normal], state}
+  end
+
   def handle_child_notification(notification, {:webrtc, peer}, _ctx, state) do
     case state.viewers[peer] do
       nil ->

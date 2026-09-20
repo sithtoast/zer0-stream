@@ -7,7 +7,7 @@ defmodule Zer0Media.LLHLS.Stream do
   Waiters are grouped by requested MSN/part, monitored, capped and timed out.
   A publication evaluates each distinct target once, renders once, and replies
   with a shared binary. No media bytes or HTTP connections live in this process.
-  Not connected to RTMP/HLSRouter until the storage/origin integration lands.
+  The opt-in origin serves these snapshots after atomic CMAF publication.
   """
   use GenServer, restart: :temporary
   alias Zer0Media.LLHLS.Playlist
@@ -31,6 +31,12 @@ defmodule Zer0Media.LLHLS.Stream do
     :exit, _reason -> {:error, :unavailable}
   end
 
+  def await_part(server, msn, part, timeout_ms \\ :default) do
+    GenServer.call(server, {:await_part, msn, part, timeout_ms}, :infinity)
+  catch
+    :exit, _reason -> {:error, :unavailable}
+  end
+
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
@@ -46,6 +52,7 @@ defmodule Zer0Media.LLHLS.Stream do
     {:ok,
      %{
        model: model,
+       require_media?: Keyword.get(opts, :require_media?, false),
        playlist: Playlist.render(model, render_opts),
        render_opts: render_opts,
        owner_ref: Process.monitor(owner),
@@ -57,37 +64,11 @@ defmodule Zer0Media.LLHLS.Stream do
   end
 
   @impl true
-  def handle_call({:await, msn, part, timeout}, from, state) do
-    timeout = if timeout == :default, do: state.timeout_ms, else: timeout
+  def handle_call({:await, msn, part, timeout}, from, state),
+    do: reply_or_wait(state, from, {:playlist, msn, part}, timeout)
 
-    case Playlist.availability(state.model, msn, part) do
-      :ready ->
-        {:reply, {:ok, state.playlist}, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-
-      :wait ->
-        cond do
-          not is_integer(timeout) or timeout <= 0 or timeout > state.timeout_ms ->
-            {:reply, {:error, :invalid_timeout}, state}
-
-          map_size(state.waiters) >= state.max_waiters ->
-            emit(:rejected, %{count: 1}, %{reason: :capacity})
-            {:reply, {:error, :capacity}, state}
-
-          true ->
-            ref = Process.monitor(elem(from, 0))
-            timer = Process.send_after(self(), {:wait_timeout, ref}, timeout)
-            key = {msn, part}
-            waiter = %{from: from, timer: timer, key: key, started: System.monotonic_time()}
-            buckets = Map.update(state.buckets, key, MapSet.new([ref]), &MapSet.put(&1, ref))
-            state = %{state | waiters: Map.put(state.waiters, ref, waiter), buckets: buckets}
-            emit(:wait_start, %{count: 1, active: map_size(state.waiters)}, %{})
-            {:noreply, state}
-        end
-    end
-  end
+  def handle_call({:await_part, msn, part, timeout}, from, state),
+    do: reply_or_wait(state, from, {:part, msn, part}, timeout)
 
   def handle_call({:part, msn, index, duration, independent?}, _from, state) do
     case Playlist.publish_part(state.model, msn, index, duration, independent?) do
@@ -164,14 +145,60 @@ defmodule Zer0Media.LLHLS.Stream do
       %{}
     )
 
-    Enum.reduce(state.buckets, state, fn {{msn, part}, refs}, acc ->
-      if Playlist.availability(model, msn, part) == :ready do
-        Enum.reduce(refs, acc, &release(&2, &1, {:ok, acc.playlist}, :published))
-      else
-        acc
+    Enum.reduce(state.buckets, state, fn {key, refs}, acc ->
+      case availability(state, key) do
+        :wait -> acc
+        :ready -> Enum.reduce(refs, acc, &release(&2, &1, response(acc, key), :published))
+        {:error, reason} -> Enum.reduce(refs, acc, &release(&2, &1, {:error, reason}, reason))
       end
     end)
   end
+
+  defp reply_or_wait(state, from, key, timeout) do
+    timeout = if timeout == :default, do: state.timeout_ms, else: timeout
+
+    case availability(state, key) do
+      :ready ->
+        {:reply, response(state, key), state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+
+      :wait ->
+        cond do
+          not is_integer(timeout) or timeout <= 0 or timeout > state.timeout_ms ->
+            {:reply, {:error, :invalid_timeout}, state}
+
+          map_size(state.waiters) >= state.max_waiters ->
+            emit(:rejected, %{count: 1}, %{reason: :capacity})
+            {:reply, {:error, :capacity}, state}
+
+          true ->
+            ref = Process.monitor(elem(from, 0))
+            timer = Process.send_after(self(), {:wait_timeout, ref}, timeout)
+            waiter = %{from: from, timer: timer, key: key, started: System.monotonic_time()}
+            buckets = Map.update(state.buckets, key, MapSet.new([ref]), &MapSet.put(&1, ref))
+            state = %{state | waiters: Map.put(state.waiters, ref, waiter), buckets: buckets}
+            emit(:wait_start, %{count: 1, active: map_size(state.waiters)}, %{})
+            {:noreply, state}
+        end
+    end
+  end
+
+  defp availability(
+         %{require_media?: true, model: %{parts: [], segments: [], ended?: false}},
+         {:playlist, nil, nil}
+       ),
+       do: :wait
+
+  defp availability(state, {:playlist, msn, part}),
+    do: Playlist.availability(state.model, msn, part)
+
+  defp availability(state, {:part, msn, part}),
+    do: Playlist.part_availability(state.model, msn, part)
+
+  defp response(state, {:playlist, _, _}), do: {:ok, state.playlist}
+  defp response(_state, {:part, _, _}), do: {:ok, :available}
 
   defp release(state, ref, reply, outcome) do
     case Map.pop(state.waiters, ref) do

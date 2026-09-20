@@ -57,6 +57,7 @@ defmodule Zer0Media.HLSCleanup do
   defp hls_roots do
     [
       Application.get_env(:zer0_media, :hls_dir, "priv/hls"),
+      Application.get_env(:zer0_media, :llhls_dir, "priv/llhls"),
       Application.get_env(:zer0_media, :boombox_hls_dir, "priv/hls-boombox")
     ]
     |> Enum.map(&Path.expand/1)
@@ -69,7 +70,9 @@ defmodule Zer0Media.HLSCleanup do
         System.get_env("HLS_CLEANUP_GRACE_MS")
 
     case value do
-      value when is_integer(value) and value >= 0 -> value
+      value when is_integer(value) and value >= 0 ->
+        value
+
       value when is_binary(value) ->
         case Integer.parse(value) do
           {parsed, ""} when parsed >= 0 -> parsed

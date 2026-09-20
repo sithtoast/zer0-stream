@@ -28,11 +28,48 @@ defmodule Zer0Media.MediaConfig do
       )
     end
 
+    Application.put_env(:zer0_media, :llhls, load_llhls!(System.get_env(), config))
     Application.put_env(:zer0_media, :media_timing, config)
     config
   end
 
   def timing, do: Application.fetch_env!(:zer0_media, :media_timing)
+
+  def llhls, do: Application.fetch_env!(:zer0_media, :llhls)
+
+  def load_llhls!(env, timing) do
+    enabled? =
+      case env["LLHLS_ENABLED"] do
+        value when value in [nil, "false", "0"] -> false
+        value when value in ["true", "1"] -> true
+        _ -> raise ArgumentError, "LLHLS_ENABLED must be true or false"
+      end
+
+    target_ms =
+      positive_integer!(env["LLHLS_TARGET_DURATION_MS"] || "6000", "LLHLS_TARGET_DURATION_MS")
+
+    retention_ms =
+      positive_integer!(env["LLHLS_RETENTION_MS"] || "60000", "LLHLS_RETENTION_MS", 600_000)
+
+    max_waiters =
+      positive_integer!(env["LLHLS_MAX_WAITERS"] || "5000", "LLHLS_MAX_WAITERS", 100_000)
+
+    if enabled? and
+         (rem(target_ms, 1000) != 0 or target_ms * 1_000_000 <= timing.segment_duration or
+            retention_ms < 8 * target_ms or timing.part_duration < 50_000_000) do
+      raise ArgumentError,
+            "LL-HLS requires a whole-second target above the segment minimum, retention >= 8 targets and parts >= 50ms"
+    end
+
+    %{
+      enabled?: enabled?,
+      target_duration: Membrane.Time.milliseconds(target_ms),
+      part_duration: timing.part_duration,
+      retention_ms: retention_ms,
+      max_waiters: max_waiters,
+      renditions: ["audio", "video"]
+    }
+  end
 
   defp duration_ms!(env) do
     case {env["HLS_SEGMENT_DURATION_MS"], env["HLS_SEGMENT_DURATION"]} do
