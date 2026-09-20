@@ -146,6 +146,46 @@ defmodule Zer0StreamWeb.StreamControllerTest do
     assert Zer0Stream.PlaybackToken.viewer_id(token, session.id) == {:ok, "viewer:opaque-alice"}
   end
 
+  test "LL-HLS descriptors are opt-in and share the signed viewer credential", %{conn: conn} do
+    previous = Application.get_env(:zer0_stream, :llhls_playback_enabled)
+
+    on_exit(fn ->
+      if previous == nil,
+        do: Application.delete_env(:zer0_stream, :llhls_playback_enabled),
+        else: Application.put_env(:zer0_stream, :llhls_playback_enabled, previous)
+    end)
+
+    {:ok, creator} = Streams.create_creator(%{external_id: "llhls-viewer"})
+    {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Low latency"})
+    {:ok, %{token: key}} = Streams.rotate_creator_stream_key(creator)
+    {:ok, session} = Zer0Stream.Ingest.authorize_rtmp(key, "llhls-viewer-connection")
+    path = "/api/streams/#{stream.id}/playback"
+    params = %{"viewer_id" => "opaque-alice"}
+    Application.put_env(:zer0_stream, :llhls_playback_enabled, true)
+    legacy = conn |> service_conn(:post, path, params) |> post(path, params) |> json_response(200)
+    refute legacy["llhls"]
+
+    session
+    |> Ecto.Changeset.change(webrtc_url: "ws://localhost:8080/webrtc/#{session.id}")
+    |> Zer0Stream.Repo.update!()
+
+    response = conn |> service_conn(:post, path, params) |> post(path, params)
+    result = json_response(response, 200)
+    assert result["llhls"]["session_url"] == "http://localhost:8080/llhls/#{session.id}/session"
+    assert result["llhls"]["expires_at"] == result["playback_expires_at"]
+
+    assert Zer0Stream.PlaybackToken.viewer_id(result["llhls"]["token"], session.id) ==
+             {:ok, "viewer:opaque-alice"}
+
+    assert get_resp_header(response, "cache-control") == ["private, no-store"]
+    Application.put_env(:zer0_stream, :llhls_playback_enabled, false)
+
+    disabled =
+      conn |> service_conn(:post, path, params) |> post(path, params) |> json_response(200)
+
+    refute disabled["llhls"]
+  end
+
   test "does not return playback for an offline stream", %{conn: conn} do
     {:ok, creator} = Streams.create_creator(%{external_id: "creator-offline"})
     {:ok, stream} = Streams.create_stream(%{creator_id: creator.id, title: "Offline Test"})

@@ -82,7 +82,19 @@ defmodule Zer0StreamWeb.StreamController do
             resp
           end
 
-        json(conn, resp)
+        resp =
+          if session.webrtc_url &&
+               Application.get_env(:zer0_stream, :llhls_playback_enabled, false) do
+            Map.put(resp, :llhls, %{
+              session_url: "#{String.trim_trailing(base_url, "/")}/llhls/#{session.id}/session",
+              token: token,
+              expires_at: resp.playback_expires_at
+            })
+          else
+            resp
+          end
+
+        conn |> put_resp_header("cache-control", "private, no-store") |> json(resp)
     end
   end
 

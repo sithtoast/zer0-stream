@@ -20,6 +20,10 @@ if System.get_env("PHX_SERVER") do
   config :zer0_stream, Zer0StreamWeb.Endpoint, server: true
 end
 
+config :zer0_stream,
+       :llhls_playback_enabled,
+       System.get_env("LLHLS_PLAYBACK_ENABLED", "false") in ["true", "1"]
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

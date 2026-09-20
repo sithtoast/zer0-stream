@@ -20,6 +20,9 @@
 - Validate real AAC/H.264 fragments and authenticated HTTP master decoding, plus
   origin authorization, timeout, reconnect, failure and retention regressions.
 
-LL-HLS requires explicit enablement; frontend/browser and CDN acceptance remain
-pending. Standard HLS and existing playback defaults are preserved.
+- Add a loopback browser fixture using the real CMAF muxer, plus opt-in signed
+  playback descriptors for the companion frontend integration.
+
+LL-HLS requires explicit enablement; native Safari, live OBS and CDN acceptance
+remain pending. Standard HLS and existing playback defaults are preserved.
 No release artifact, deployment or playback-default change is included.

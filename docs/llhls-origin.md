@@ -1,7 +1,7 @@
 # Experimental LL-HLS origin
 
 The existing LivePipeline can now produce and serve real CMAF partial segments.
-This remains opt-in. The frontend still uses its existing playback choices; no
+This remains opt-in. The companion frontend now offers an explicit experimental LL-HLS choice; no
 public server, proxy or deployment has been changed by this implementation.
 
 ## Enable on a test worker
@@ -52,11 +52,17 @@ Startup removes stale session directories. Storage is ephemeral, not an archive.
 An existing control-plane signed playback token authorizes the session ID. Query
 string tokens are not supported on `/llhls`; they remain supported by the existing
 standard HLS routes. Media/playlist requests do not refresh viewer accounting.
-The frontend must explicitly heartbeat, for example every 20 seconds while
-playing, and renew its credential before token expiry. Expired credentials are
+The frontend explicitly heartbeats every 20 seconds while playing and renews
+its credential before expiry. Expired credentials are
 rejected even if a request was already blocked when the token expired.
 
-For a browser experiment, exchange the token with `fetch` using
+The signed control-plane playback API adds `llhls: {session_url, token, expires_at}`
+when `LLHLS_PLAYBACK_ENABLED=true` and the session uses LivePipeline. The frontend
+uses this descriptor to show the experimental choice. Automatic stays the default;
+selecting LL-HLS suppresses WebRTC probing for that selection. The frontend prefers
+hls.js where MediaSource is supported, retaining native HLS otherwise.
+
+For a direct browser experiment, exchange the token with `fetch` using
 `credentials: "include"`, then load the returned master with cookies enabled on
 all playlist/object requests. The cookie uses `SameSite=None; Secure; HttpOnly`
 and path `/llhls/ID/`. A same-site proxy is preferable for Safari experiments;
@@ -125,9 +131,11 @@ actual authenticated HTTP master playback. Part bytes exactly assemble into thei
 completed segment. The network blocking test runs through a real Bandit listener.
 
 These are local integration results, not live OBS, B-frame, browser, Apple
-validator or CDN acceptance. Next, wire the frontend session/heartbeat lifecycle
-behind an explicit playback choice; test Safari and hls.js with live ingest and a
-visible clock; then measure proxy behavior, sustained storage and socket churn.
+validator or CDN acceptance. Frontend session/heartbeat integration, renewal, mode switching and fallback
+are now implemented in the companion frontend. Its local Chromium hook fixture
+decoded real CMAF using hls.js and discovered 29 parts. Native Safari, live OBS
+and end-to-end latency remain unverified. Next, test live ingest with a visible
+clock, then proxy behavior, sustained storage and socket churn.
 The 2–4-second end-to-end target remains unmeasured.
 
 See [architecture](media-architecture.md), [synthetic waiter results](llhls-benchmark.md)

@@ -28,14 +28,14 @@ There is no measured reason here for a language rewrite.
 | HTTP/storage | HLSRouter serves local files. The opt-in LLHLS.Storage adapter persists partial segments and /llhls serves authenticated blocking reload/preload waits. Default FileStorage still serves ordinary HLS. HLSCleanup purges stale session directories on startup and keeps ended sessions for 60 seconds by default. This is not archival storage. |
 | Timing | Timestamp scale and AAC rate remain 1.0. New MediaConfig validates timing at application startup, accepts explicit milliseconds and converts through Membrane.Time. Old segment nanoseconds are a deprecated compatibility alias. |
 | WebRTC | Separate peer/signaling/sink per viewer and demand-aware BroadcastTee outputs already fix the former single-peer limitation. AAC decoding and Opus encoding still happen per viewer. |
-| Viewer identity | Verified v2 tokens preserve identity across token refresh and HLS/WebRTC switching. ViewerTracker deduplicates session/identity heartbeats with a TTL. Standard HLS still counts media requests and rewrites URLs with token and viewer_id. The opt-in LL-HLS session/heartbeat API uses shared media URLs and header/cookie authorization; its frontend and edge integration remain pending. |
+| Viewer identity | Verified v2 tokens preserve identity across token refresh and HLS/WebRTC switching. ViewerTracker deduplicates session/identity heartbeats with a TTL. Standard HLS still counts media requests and rewrites URLs with token and viewer_id. The opt-in LL-HLS session/heartbeat API uses shared media URLs and header/cookie authorization; its frontend integration is implemented; edge and native-browser acceptance remain pending. |
 | Legacy | LivePipeline is the documented production path but still requires `LIVE_PIPELINE_MODE=true`. Unset means Boombox. `LEGACY_HLS_MODE=true` actually bypasses Boombox when LivePipeline is off, optionally relaying to BOOMBOX_RELAY_URL. Preserve this behavior until a mode migration accounts for relay users. LivePipeline now skips the unnecessary Boombox prewarm. |
 | Containers | Worker has a multi-stage build, locked dependencies, preserved vendored fixes and `mix run --no-compile --no-deps-check`. It still includes Mix/source and runs as root. Phoenix still runs `mix phx.server`. Neither is an OTP-release runtime yet. |
 
 Earlier fixes are retained: RTMP isolation, ExICE TURN routing, per-viewer
 signaling/crash groups, nonblocking secondary media branches, timestamp defaults,
-viewer identity and Docker native-build integrity. No frontend/player changes,
-codec changes, public deployment, or default playback switch accompany this slice.
+viewer identity and Docker native-build integrity. The companion frontend adds an explicit experimental choice and credential/heartbeat
+lifecycle. No codec changes, public deployment, or default playback switch accompany this work.
 
 ## Decision: reuse CMAF packaging; own the origin contract
 
@@ -150,8 +150,8 @@ Authorization header for a path-scoped HttpOnly cookie and a generation master
 URL. Every LL-HLS resource verifies a header or cookie credential, including a
 second expiration check after waiting. Media URLs carry no viewer identity;
 only session creation/explicit heartbeats update ViewerTracker. Standard HLS
-retains its existing token behavior. Frontend heartbeat lifecycle, Safari cookie
-behavior and CDN edge authorization still require integration tests. Shared URLs
+retains its existing token behavior. Frontend heartbeat/refresh, switching and fallback now have deterministic and local
+Chromium hook tests. Safari cookie behavior and CDN edge authorization still need acceptance tests. Shared URLs
 do not yet imply shared CDN caching. CDN hits must remain authorized.
 
 Malformed delivery directives map to 400; unavailable/time-limited waits to 503;
@@ -242,7 +242,8 @@ process death cleanup is tested; HTTP/1 disconnect may not immediately kill a
 blocked Plug process, so its server-owned deadline bounds retention. Full socket
 cancellation, HTTP/2 reset and churn behavior require network load testing.
 
-Next slice: frontend session/heartbeat and opt-in Safari/hls.js playback against
-real RTMP/OBS (including B-frames and changing GOPs), then proxy/cache tests and
+The companion frontend implements session/heartbeat and credential refresh behind
+an explicit choice; a local Chromium fixture decoded CMAF via hls.js. Next: native
+Safari and sustained hls.js playback against real RTMP/OBS (including B-frames and changing GOPs), then proxy/cache tests and
 sustained retention/churn measurements. Keep LL-HLS opt-in until these pass.
 Apple validator and browser interoperability have not been claimed here.

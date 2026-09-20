@@ -48,7 +48,8 @@ dev environment with a TURN relay. Creators choose delivery mode per channel.
 - **CDN-backed HLS origin** (currently served directly from the media worker).
 - **LL-HLS client/CDN acceptance** — opt-in CMAF publication, authenticated blocking
   origin, generation lifecycle and HTTP/media tests are implemented. Frontend
-  session/heartbeat wiring, Safari/hls.js and proxy testing remain.
+  session/heartbeat wiring and a local Chromium hook test now pass. Native Safari,
+  sustained live OBS and proxy acceptance remain.
   See [origin setup](docs/llhls-origin.md).
 - **WebRTC encoding efficiency** — peer isolation is implemented; AAC-to-Opus
   still runs separately for each viewer.

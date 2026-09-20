@@ -93,6 +93,7 @@ when they drift. **Keep each one identical on every service that shares it.**
 | `POOL_SIZE` | `10` | DB pool size. |
 | `DNS_CLUSTER_QUERY` | — | Optional DNS cluster. |
 | `PLAYBACK_BASE_URL` | `http://localhost:8080` | Base URL used to build HLS playback URLs. |
+| `LLHLS_PLAYBACK_ENABLED` | `false` | Control-plane opt-in: include LL-HLS session credentials for LivePipeline sessions. Enable only after the worker supports `/llhls`; the frontend keeps Automatic as default. |
 | `PLAYBACK_TOKEN_SECRET` | `dev-playback-secret` | Secret for signed playback URLs. |
 | `MAIN_APP_AUTH_SECRET` | — | Shared with the frontend. |
 | `CONTROL_PLANE_AUTH_SECRET` | — | Shared with the media_worker. |
