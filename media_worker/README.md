@@ -103,8 +103,7 @@ target defaults to one second. Configure it with `HLS_SEGMENT_DURATION_MS`
 the target. Actual video cuts still depend on publisher keyframes.
 
 Timing is validated at application startup. `LLHLS_PART_DURATION_MS` defaults to
-`200` and must not exceed the segment target, but does **not** enable partial
-output yet. The deprecated `HLS_SEGMENT_DURATION` variable still means
+`200` and must not exceed the segment target, and only enables partial output when `LLHLS_ENABLED=true`. The deprecated `HLS_SEGMENT_DURATION` variable still means
 nanoseconds (`4000000000` = four seconds); migrate it to
 `HLS_SEGMENT_DURATION_MS=4000`. Do not set both. Values must be positive whole
 milliseconds, at most 60 seconds.
@@ -114,10 +113,12 @@ Completed HLS artifacts are retained for 60 seconds by default
 storage is not an archive. RTMP idle cleanup defaults to 15 seconds
 (`RTMP_IDLE_TIMEOUT_MS`) and handles publishers that omit `deleteStream`.
 
-For the LL-HLS state foundation, packaging decision, storage retention contract
-and next implementation slice, see [media architecture](../docs/media-architecture.md).
-Production still serves standard HLS until real part storage and blocking HTTP
-handlers are integrated.
+The experimental LL-HLS path now persists real CMAF parts and serves authenticated
+blocking playlists/preload objects. Enable it with `LIVE_PIPELINE_MODE=true` and
+`LLHLS_ENABLED=true`; the existing frontend is not switched automatically.
+See [LL-HLS setup and HTTP contract](../docs/llhls-origin.md) and
+[media architecture](../docs/media-architecture.md). Standard HLS remains available.
+Browser/CDN acceptance and end-to-end latency measurements are still pending.
 
 While the publisher is live, inspect the manifest and segments in that
 directory. A non-empty manifest with advancing segments is the first playback

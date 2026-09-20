@@ -27,3 +27,19 @@ Use this baseline to test changes, not to justify a language rewrite or claim
 production capacity. Repeat through Bandit and a reverse proxy after the origin
 is integrated, including request cancellation, distinct wait targets, sustained
 part publication and client churn.
+
+## Origin integration regression run
+
+Repeated after adding shared playlist/preload waiter coordination, on the same
+Mac/runtime. This is still the coordinator-only benchmark, not HTTP load.
+
+| Concurrent callers | One event through all replies | Process bytes / blocked caller | Incremental bytes / caller | Timeout wave |
+|---:|---:|---:|---:|---:|
+| 100 | 0.285 ms | 4,198 | 1,450 | 1,000.821 ms |
+| 1,000 | 2.907 ms | 3,665 | 974 | 1,012.138 ms |
+| 5,000 | 16.422 ms | 3,559 | 870 | 1,054.628 ms |
+
+Registered/drained mailbox snapshots remained zero, all timeout waves released
+all waits, and post-GC server memory was 2,848–2,960 bytes. The same 3,684-byte
+playlist rendered in 28.124 microseconds on average. Differences from the earlier
+run are not a demonstrated performance improvement; no throughput claim follows.

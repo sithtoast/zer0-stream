@@ -81,7 +81,46 @@ defmodule Zer0Media.LLHLSPipelineTest do
       validate_with_ffprobe(directory, model, rendition, output)
     end
 
+    validate_http_master(info, session)
     refute Process.alive?(pipeline)
+  end
+
+  defp validate_http_master(info, session) do
+    if executable = System.find_executable("ffprobe") do
+      server = start_supervised!({Bandit, plug: Zer0Media.HLSRouter, port: 0})
+      {:ok, {_ip, port}} = ThousandIsland.listener_info(server)
+      payload = "v2:#{session}:#{System.system_time(:second) + 60}:fixture"
+
+      signature =
+        :crypto.mac(
+          :hmac,
+          :sha256,
+          System.get_env("PLAYBACK_TOKEN_SECRET", "dev-playback-secret"),
+          payload
+        )
+        |> Base.url_encode64(padding: false)
+
+      token = Base.url_encode64(payload <> ":" <> signature, padding: false)
+
+      {json, 0} =
+        System.cmd(executable, [
+          "-v",
+          "error",
+          "-headers",
+          "Authorization: Bearer #{token}\r\n",
+          "-count_frames",
+          "-show_streams",
+          "-of",
+          "json",
+          "http://127.0.0.1:#{port}/llhls/#{session}/#{info.generation}/master.m3u8"
+        ])
+
+      tracks = Jason.decode!(json)["streams"]
+      assert Enum.find(tracks, &(&1["codec_name"] == "h264"))["nb_read_frames"] == "180"
+
+      assert Enum.find(tracks, &(&1["codec_name"] == "aac"))["nb_read_frames"]
+             |> String.to_integer() >= 281
+    end
   end
 
   defp validate_with_ffprobe(directory, model, rendition, output) do

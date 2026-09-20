@@ -14,5 +14,6 @@ ffmpeg -f lavfi -i sine=frequency=440:sample_rate=48000 -t 6 -c:a aac -b:a 64k -
 
 `llhls_pipeline_test.exs` uses production LivePipeline and the installed Membrane
 muxer, checks exact part/segment assembly and parses the resulting playlists.
-When ffprobe is installed it additionally decodes local assembled media, counts frames and checks DTS/keyframes.
+When ffprobe is installed it additionally decodes local assembled media and the
+actual authenticated HTTP master, counts frames and checks DTS/keyframes.
 This is not OBS/RTMP packet, B-frame, Safari or hls.js interoperability evidence.

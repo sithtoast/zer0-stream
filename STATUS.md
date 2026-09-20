@@ -46,9 +46,10 @@ dev environment with a TURN relay. Creators choose delivery mode per channel.
 - **WHIP ingest** support.
 - **VOD / recording** to object storage.
 - **CDN-backed HLS origin** (currently served directly from the media worker).
-- **LL-HLS live integration** — pure state, playlist rendering, bounded waiting and
-  synthetic load tests exist; real CMAF publication and blocking HTTP are next.
-  See [media architecture](docs/media-architecture.md).
+- **LL-HLS client/CDN acceptance** — opt-in CMAF publication, authenticated blocking
+  origin, generation lifecycle and HTTP/media tests are implemented. Frontend
+  session/heartbeat wiring, Safari/hls.js and proxy testing remain.
+  See [origin setup](docs/llhls-origin.md).
 - **WebRTC encoding efficiency** — peer isolation is implemented; AAC-to-Opus
   still runs separately for each viewer.
 - **TURN-over-TLS** on port 5349.

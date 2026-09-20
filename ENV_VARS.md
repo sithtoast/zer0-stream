@@ -56,7 +56,11 @@ when they drift. **Keep each one identical on every service that shares it.**
 | `RTMP_PORT` | `1935` | RTMP ingest port. |
 | `HLS_DIR` | `priv/hls` | HLS output directory. |
 | `HLS_SEGMENT_DURATION_MS` | `1000` | LivePipeline segment target in milliseconds, converted with `Membrane.Time`. |
-| `LLHLS_PART_DURATION_MS` | `200` | Reserved LL-HLS part target in milliseconds; must not exceed the segment target. Does not enable partial output yet. |
+| `LLHLS_PART_DURATION_MS` | `200` | LL-HLS part target in milliseconds; must not exceed the segment minimum; at least 50ms when enabled. |
+| `LLHLS_ENABLED` | `false` | Opt-in CMAF parts and `/llhls` origin; also requires `LIVE_PIPELINE_MODE=true`. Does not switch the frontend. |
+| `LLHLS_TARGET_DURATION_MS` | `6000` | Fixed advertised maximum segment duration; whole seconds, above segment minimum, at most 60000ms. Exceeding it fails the generation. |
+| `LLHLS_RETENTION_MS` | `60000` | Object grace after eviction; at least 8 target durations, at most 600000ms. Final playlists and then objects each get one grace interval. |
+| `LLHLS_MAX_WAITERS` | `5000` | Shared cap for blocked playlist/part calls per rendition; positive, at most 100000. |
 | `HLS_SEGMENT_DURATION` | — | Deprecated nanosecond alias; do not set alongside `HLS_SEGMENT_DURATION_MS`. Whole milliseconds required. |
 | `HLS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:4000` | CORS allowed origins for HLS. |
 | `RTMP_IDLE_TIMEOUT_MS` | `15000` | Idle RTMP timeout. |

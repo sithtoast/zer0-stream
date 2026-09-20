@@ -51,6 +51,8 @@ defmodule Zer0Media.HLSRouter do
     end
   end
 
+  forward("/llhls", to: Zer0Media.LLHLS.Router)
+
   get "/hls/*path" do
     serve_file(conn, path, hls_dir(), true)
   end

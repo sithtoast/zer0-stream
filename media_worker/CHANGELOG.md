@@ -11,5 +11,15 @@
   failure and restart; add a 100/1,000/5,000-caller benchmark and Telemetry events.
 - Refresh media architecture and correct outdated single-peer/legacy-mode docs.
 
-LL-HLS is not connected to production ingest or HTTP playback in this slice.
+- Add opt-in real CMAF part storage using the existing Membrane muxer, atomic
+  immutable objects, generation lifecycle and delayed retirement.
+- Serve authenticated blocking playlists and hinted parts under `/llhls`, with
+  shared media URLs, session-cookie exchange and explicit viewer heartbeats.
+- Monitor pipeline loss to stop RTMP demand and session accounting; preserve
+  standard HLS fallback and isolated WebRTC outputs.
+- Validate real AAC/H.264 fragments and authenticated HTTP master decoding, plus
+  origin authorization, timeout, reconnect, failure and retention regressions.
+
+LL-HLS requires explicit enablement; frontend/browser and CDN acceptance remain
+pending. Standard HLS and existing playback defaults are preserved.
 No release artifact, deployment or playback-default change is included.
