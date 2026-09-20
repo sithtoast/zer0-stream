@@ -19,6 +19,8 @@ defmodule Zer0Media.RTMPClientHandler do
       session_id: opts.session_id,
       boombox_pid: opts[:boombox_pid],
       live_pipeline_pid: opts[:live_pipeline_pid],
+      pipeline_ref:
+        if(is_pid(opts[:live_pipeline_pid]), do: Process.monitor(opts[:live_pipeline_pid])),
       webrtc_port: opts[:webrtc_port],
       hls_output_dir: opts[:hls_output_dir],
       idle_timer: nil,
@@ -27,6 +29,8 @@ defmodule Zer0Media.RTMPClientHandler do
   end
 
   @impl true
+  def handle_info({:send_me_data, _source_pid}, %{ended?: true} = state), do: state
+
   def handle_info({:send_me_data, source_pid}, state) do
     state = %{state | source_pid: source_pid}
     Enum.each(Enum.reverse(state.buffered), &send_data(source_pid, &1))
@@ -36,14 +40,18 @@ defmodule Zer0Media.RTMPClientHandler do
 
   @impl true
   def handle_info(:stream_idle, %{ended?: false} = state) do
-    stop_session(state)
     ClientHandler.demand_data(state.client_ref, 0)
-    %{state | ended?: true, idle_timer: nil}
+    end_session(state)
   end
 
   def handle_info(:stream_idle, state), do: state
 
   @impl true
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{pipeline_ref: ref} = state) do
+    ClientHandler.demand_data(state.client_ref, 0)
+    end_session(state)
+  end
+
   def handle_info(_other, state), do: state
 
   @impl true
@@ -81,7 +89,7 @@ defmodule Zer0Media.RTMPClientHandler do
       Zer0Media.BoomboxSessionSupervisor.stop_session(state.boombox_pid)
     end
 
-    if state.live_pipeline_pid do
+    if is_pid(state.live_pipeline_pid) and Process.alive?(state.live_pipeline_pid) do
       Membrane.Pipeline.terminate(state.live_pipeline_pid)
     end
 
@@ -99,6 +107,7 @@ defmodule Zer0Media.RTMPClientHandler do
 
   defp end_session(state) do
     if state.idle_timer, do: Process.cancel_timer(state.idle_timer)
+    if state[:pipeline_ref], do: Process.demonitor(state.pipeline_ref, [:flush])
     stop_session(state)
     %{state | ended?: true, idle_timer: nil}
   end
@@ -115,7 +124,9 @@ defmodule Zer0Media.RTMPClientHandler do
         System.get_env("RTMP_IDLE_TIMEOUT_MS")
 
     case value do
-      value when is_integer(value) and value > 0 -> value
+      value when is_integer(value) and value > 0 ->
+        value
+
       value when is_binary(value) ->
         case Integer.parse(value) do
           {parsed, ""} when parsed > 0 -> parsed
