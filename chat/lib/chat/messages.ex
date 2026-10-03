@@ -27,7 +27,8 @@ defmodule Chat.Messages do
     |> Repo.insert()
   end
 
-  defp first_message?(channel_id, sender_id) when is_binary(channel_id) and is_binary(sender_id) do
+  defp first_message?(channel_id, sender_id)
+       when is_binary(channel_id) and is_binary(sender_id) do
     Message
     |> where([message], message.channel_id == ^channel_id and message.sender_id == ^sender_id)
     |> Repo.exists?()

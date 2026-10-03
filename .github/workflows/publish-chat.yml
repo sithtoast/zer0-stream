@@ -40,7 +40,7 @@ jobs:
           tags: |
             type=sha,prefix={{branch}}-
             type=ref,event=branch
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -54,6 +54,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=zer0-stream-chat
 
   deploy:
+    # Branch builds (manual runs) publish branch tags only; just main redeploys.
+    if: github.ref == 'refs/heads/main'
     needs: publish
     runs-on: ubuntu-latest
 
