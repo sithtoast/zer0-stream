@@ -11,6 +11,11 @@ can join `chat:<channel_id>` for its own `channel_id` and nothing else; joins to
 any other topic return `unauthorized`. The broadcaster badge comes from the
 token's `broadcaster_id`, never from join params.
 
+To check a running service enforces this, copy a token and channel id from a
+channel page (`#chat-panel`'s `data-token` and `data-channel-id`) and run
+`CHAT_TOKEN=... CHANNEL_ID=... node scripts/scope_check.mjs wss://<host>/socket`
+(add `--send` to also post a test message). See the script for details.
+
 ## Local development
 
 ```sh
