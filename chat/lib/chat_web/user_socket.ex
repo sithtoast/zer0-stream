@@ -20,12 +20,19 @@ defmodule ChatWeb.UserSocket do
     secret = Application.fetch_env!(:chat, :chat_token_secret)
     max_age = Application.get_env(:chat, :chat_token_max_age, 3600)
 
+    # Tokens are scoped to one channel: the main app only issues one after
+    # checking the viewer may chat there, so the channel and its broadcaster
+    # come from the signed claims rather than from join params.
     case Phoenix.Token.verify(secret, "chat-user", token, max_age: max_age) do
-      {:ok, %{"user_id" => user_id} = claims} ->
-        {:ok, %{id: user_id, display_name: Map.get(claims, "display_name")}}
-
-      {:ok, %{user_id: user_id} = claims} ->
-        {:ok, %{id: user_id, display_name: Map.get(claims, :display_name)}}
+      {:ok, %{"user_id" => user_id, "channel_id" => channel_id} = claims}
+      when is_binary(channel_id) and channel_id != "" ->
+        {:ok,
+         %{
+           id: user_id,
+           display_name: Map.get(claims, "display_name"),
+           channel_id: channel_id,
+           broadcaster_id: Map.get(claims, "broadcaster_id")
+         }}
 
       _ ->
         :error

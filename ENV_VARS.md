@@ -156,7 +156,9 @@ The chat connection needs **four things** to line up. Check them in order:
    The channel page only renders the chat panel when `chat_token` is non-nil. That
    requires a logged-in viewer **and** chat access (channel `chat_access_mode ==
    "open"` or the viewer has a chat grant). Anonymous viewers or viewers without
-   access get no token and no chat panel.
+   access get no token and no chat panel. The token is scoped to that channel
+   (`channel_id` and `broadcaster_id` claims): the chat service refuses tokens
+   without a `channel_id` and rejects joins to any other `chat:<id>` topic.
 
 ### Quick checks
 

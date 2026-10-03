@@ -4,8 +4,12 @@ Independent Phoenix Channels service for zer0.tv. The service listens on port
 4100, exposes `GET /health`, and accepts WebSocket connections at `/socket`.
 
 Chat clients connect with a short-lived Phoenix token in the `token` parameter.
-The token must contain a `user_id` claim and uses the `chat-user` salt. The
-main application will issue these tokens through the signed service contract.
+The token uses the `chat-user` salt and must contain `user_id` and `channel_id`
+claims (plus optional `display_name` and `broadcaster_id`). The main application
+issues one only after checking the viewer may chat in that channel, so a token
+can join `chat:<channel_id>` for its own `channel_id` and nothing else; joins to
+any other topic return `unauthorized`. The broadcaster badge comes from the
+token's `broadcaster_id`, never from join params.
 
 ## Local development
 

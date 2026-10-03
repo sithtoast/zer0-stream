@@ -3,16 +3,29 @@ defmodule ChatWeb.ChatChannelTest do
 
   alias Chat.Messages
 
-  setup do
-    token =
-      Phoenix.Token.sign(
-        Application.fetch_env!(:chat, :chat_token_secret),
-        "chat-user",
-        %{"user_id" => "user-1", "display_name" => "Ada"}
-      )
+  defp sign(claims) do
+    Phoenix.Token.sign(Application.fetch_env!(:chat, :chat_token_secret), "chat-user", claims)
+  end
 
-    raw_socket = socket(ChatWeb.UserSocket, "socket-id", %{"token" => token})
-    {:ok, authenticated_socket} = ChatWeb.UserSocket.connect(%{"token" => token}, raw_socket, %{})
+  defp connect_with(claims) do
+    token = sign(claims)
+    ChatWeb.UserSocket.connect(%{"token" => token}, socket(ChatWeb.UserSocket, nil, %{}), %{})
+  end
+
+  defp member(id, name, channel_id, broadcaster_id \\ "broadcaster-1") do
+    socket(ChatWeb.UserSocket, id, %{
+      user: %{id: id, display_name: name, channel_id: channel_id, broadcaster_id: broadcaster_id}
+    })
+  end
+
+  setup do
+    {:ok, authenticated_socket} =
+      connect_with(%{
+        "user_id" => "user-1",
+        "display_name" => "Ada",
+        "channel_id" => "test-channel",
+        "broadcaster_id" => "broadcaster-1"
+      })
 
     {:ok, _join_reply, socket} =
       subscribe_and_join(authenticated_socket, ChatWeb.ChatChannel, "chat:test-channel")
@@ -29,7 +42,7 @@ defmodule ChatWeb.ChatChannelTest do
     assert_push "presence_state", %{"user-1" => %{metas: [%{display_name: "Ada"} | _]}}
 
     {:ok, _, quiet_socket} =
-      socket(ChatWeb.UserSocket, "quiet-socket", %{user: %{id: "quiet", display_name: "Quiet"}})
+      member("quiet", "Quiet", "test-channel")
       |> subscribe_and_join(ChatWeb.ChatChannel, socket.topic)
 
     assert_broadcast "presence_diff",
@@ -49,20 +62,20 @@ defmodule ChatWeb.ChatChannelTest do
     assert_push "presence_state", %{"user-1" => _}
 
     {:ok, _, second_tab} =
-      socket(ChatWeb.UserSocket, "second-tab", %{user: %{id: "multi", display_name: "Multi"}})
+      member("multi", "Multi", "test-channel")
       |> subscribe_and_join(ChatWeb.ChatChannel, socket.topic)
 
     assert_broadcast "presence_diff", %{joins: %{"multi" => _}}, 1_000
 
     {:ok, _, third_tab} =
-      socket(ChatWeb.UserSocket, "third-tab", %{user: %{id: "multi", display_name: "Multi"}})
+      member("multi", "Multi", "test-channel")
       |> subscribe_and_join(ChatWeb.ChatChannel, socket.topic)
 
     assert_broadcast "presence_diff", %{joins: %{"multi" => _}}, 1_000
     assert %{metas: [_, _]} = ChatWeb.Presence.list(socket)["multi"]
 
     {:ok, _, other_room} =
-      socket(ChatWeb.UserSocket, "other-room", %{user: %{id: "other", display_name: "Other"}})
+      member("other", "Other", "other-room")
       |> subscribe_and_join(ChatWeb.ChatChannel, "chat:other-room")
 
     assert_push "presence_state", %{"other" => _}
@@ -120,7 +133,7 @@ defmodule ChatWeb.ChatChannelTest do
     assert [%{body: nil, gif_slug: "hello-hi-662"}] = Messages.recent("test-channel")
 
     {:ok, %{messages: [message]}, _} =
-      socket(ChatWeb.UserSocket, "reconnect", %{user: %{id: "user-2", display_name: "Bob"}})
+      member("user-2", "Bob", "test-channel")
       |> subscribe_and_join(ChatWeb.ChatChannel, "chat:test-channel")
 
     assert message.gif_slug == "hello-hi-662"
@@ -154,5 +167,42 @@ defmodule ChatWeb.ChatChannelTest do
 
     ref = push(socket, "message", %{"body" => "", "gif_slug" => "hello"})
     assert_reply ref, :error, %{reason: "rate_limited"}
+  end
+
+  describe "channel-scoped tokens" do
+    test "refuse tokens without a channel claim" do
+      assert :error = connect_with(%{"user_id" => "user-1", "display_name" => "Ada"})
+      assert :error = connect_with(%{"user_id" => "user-1", "channel_id" => ""})
+    end
+
+    test "only join the channel named in the token", %{socket: socket} do
+      assert {:error, %{reason: "unauthorized"}} =
+               subscribe_and_join(
+                 member("user-3", "Eve", "test-channel"),
+                 ChatWeb.ChatChannel,
+                 "chat:other-room"
+               )
+
+      assert Messages.recent("other-room") == []
+      assert socket.assigns.channel_id == "test-channel"
+    end
+
+    test "take the broadcaster from the token, not join params" do
+      {:ok, _, spoofer} =
+        member("user-4", "Mallory", "test-channel")
+        |> subscribe_and_join(ChatWeb.ChatChannel, "chat:test-channel", %{
+          "broadcaster_id" => "user-4"
+        })
+
+      ref = push(spoofer, "message", %{"body" => "I am the streamer"})
+      assert_reply ref, :ok, %{is_broadcaster: false}
+
+      {:ok, _, streamer} =
+        member("broadcaster-1", "Streamer", "test-channel")
+        |> subscribe_and_join(ChatWeb.ChatChannel, "chat:test-channel")
+
+      ref = push(streamer, "message", %{"body" => "hi chat"})
+      assert_reply ref, :ok, %{is_broadcaster: true}
+    end
   end
 end

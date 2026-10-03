@@ -9,10 +9,18 @@ defmodule ChatWeb.ChatChannel do
   @rate_limit_window_ms 10_000
 
   @impl true
-  def join("chat:" <> channel_id, params, socket) when channel_id != "" do
-    # The broadcaster's Twitch user id is passed by the frontend on join so we
-    # can label that sender's messages with a broadcaster badge.
-    broadcaster_id = params["broadcaster_id"]
+  def join("chat:" <> channel_id, _params, %{assigns: %{user: user}} = socket)
+      when channel_id != "" do
+    if channel_id == user.channel_id do
+      do_join(channel_id, user.broadcaster_id, socket)
+    else
+      {:error, %{reason: "unauthorized"}}
+    end
+  end
+
+  def join(_topic, _params, _socket), do: {:error, %{reason: "invalid_channel"}}
+
+  defp do_join(channel_id, broadcaster_id, socket) do
     messages = Messages.recent(channel_id)
 
     socket =
@@ -24,8 +32,6 @@ defmodule ChatWeb.ChatChannel do
     send(self(), :after_join)
     {:ok, %{messages: Enum.map(messages, &message_payload(&1, broadcaster_id))}, socket}
   end
-
-  def join(_topic, _params, _socket), do: {:error, %{reason: "invalid_channel"}}
 
   @impl true
   def handle_info(:after_join, socket) do
