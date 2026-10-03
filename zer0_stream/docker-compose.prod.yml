@@ -27,6 +27,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    networks:
+      default:
+        ipv4_address: ${API_IP:-192.168.1.4}
     restart: unless-stopped
 
   chat:
@@ -49,6 +52,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    networks:
+      default:
+        ipv4_address: ${CHAT_IP:-192.168.1.5}
     restart: unless-stopped
 
   media_worker:
@@ -71,8 +77,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      default:
+        ipv4_address: ${MEDIA_IP:-192.168.1.6}
     restart: unless-stopped
 
+# Caddy on the router proxies to these fixed dc addresses; without pins a
+# redeploy can hand the containers each other's IPs.
 networks:
   default:
     name: dc
